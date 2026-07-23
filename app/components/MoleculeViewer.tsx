@@ -8,11 +8,11 @@ import {
 } from "../lib/molecule";
 
 const ATOM_SCALE: Record<MoleculeElement, number> = {
-  H: 0.16,
-  C: 0.28,
-  N: 0.31,
-  O: 0.31,
-  S: 0.34,
+  H: 0.1,
+  C: 0.2,
+  N: 0.23,
+  O: 0.23,
+  S: 0.25,
 };
 
 function MoleculeFallback({
@@ -99,11 +99,21 @@ export function MoleculeViewer({
   active: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const activeRef = useRef(active);
+  const controlsRef = useRef<{ start: () => void; stop: () => void } | null>(
+    null,
+  );
   const [fallback, setFallback] = useState(false);
 
   useEffect(() => {
+    activeRef.current = active;
+    if (active) controlsRef.current?.start();
+    else controlsRef.current?.stop();
+  }, [active]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !active) return;
+    if (!canvas) return;
     let disposed = false;
     let animationFrame = 0;
     let lastFrameAt = 0;
@@ -111,12 +121,15 @@ export function MoleculeViewer({
     let sphereGeometry: import("three").SphereGeometry | null = null;
     let bondGeometry: import("three").CylinderGeometry | null = null;
     const materials: import("three").Material[] = [];
+    let renderOnce = () => {};
 
     const stop = () => {
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
       animationFrame = 0;
+      if (!disposed) renderOnce();
     };
 
+    setFallback(false);
     void import("three")
       .then((THREE) => {
         if (disposed) return;
@@ -153,7 +166,7 @@ export function MoleculeViewer({
         );
 
         sphereGeometry = new THREE.SphereGeometry(1, 12, 8);
-        bondGeometry = new THREE.CylinderGeometry(0.12, 0.12, 1, 8);
+        bondGeometry = new THREE.CylinderGeometry(0.075, 0.075, 1, 8);
         const base = new THREE.Color(theme);
         const materialForElement = new Map<MoleculeElement, import("three").MeshStandardMaterial>();
         const elementLightness: Record<MoleculeElement, number> = {
@@ -202,7 +215,7 @@ export function MoleculeViewer({
             .clone()
             .cross(cameraAxis)
             .normalize()
-            .multiplyScalar(0.13);
+            .multiplyScalar(0.09);
           const offsets =
             bond.order === 1
               ? [0]
@@ -233,7 +246,7 @@ export function MoleculeViewer({
           "(prefers-reduced-motion: reduce)",
         ).matches;
         const render = (now: number) => {
-          if (disposed || document.hidden) {
+          if (disposed || document.hidden || !activeRef.current) {
             animationFrame = 0;
             return;
           }
@@ -245,8 +258,11 @@ export function MoleculeViewer({
           lastFrameAt = now;
           renderer!.render(scene, camera);
         };
+        renderOnce = () => {
+          if (!disposed && !document.hidden) renderer!.render(scene, camera);
+        };
         const start = () => {
-          if (!animationFrame && !document.hidden) {
+          if (!animationFrame && !document.hidden && activeRef.current) {
             animationFrame = window.requestAnimationFrame(render);
           }
         };
@@ -255,13 +271,21 @@ export function MoleculeViewer({
           else start();
         };
         document.addEventListener("visibilitychange", handleVisibility);
-        start();
+        controlsRef.current = { start, stop };
+        if (activeRef.current) start();
+        else renderOnce();
         setFallback(false);
 
-        const previousCleanup = cleanup;
         cleanup = () => {
           document.removeEventListener("visibilitychange", handleVisibility);
-          previousCleanup();
+          stop();
+          controlsRef.current = null;
+          disposed = true;
+          sphereGeometry?.dispose();
+          bondGeometry?.dispose();
+          materials.forEach((material) => material.dispose());
+          renderer?.dispose();
+          renderer?.forceContextLoss();
         };
       })
       .catch(() => {
@@ -271,6 +295,7 @@ export function MoleculeViewer({
     let cleanup = () => {
       disposed = true;
       stop();
+      controlsRef.current = null;
       sphereGeometry?.dispose();
       bondGeometry?.dispose();
       materials.forEach((material) => material.dispose());
@@ -278,7 +303,7 @@ export function MoleculeViewer({
       renderer?.forceContextLoss();
     };
     return () => cleanup();
-  }, [active, molecule, theme]);
+  }, [molecule, theme]);
 
   if (fallback) return <MoleculeFallback molecule={molecule} theme={theme} />;
   return (

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render(path = "/") {
@@ -29,4 +30,13 @@ test("server-renders the Japanese scanner shell", async () => {
   assert.match(html, /aria-label="調べる写真をえらぶ"/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
   assert.doesNotMatch(html, /codex-preview/);
+});
+
+test("recognized results expose a compact Japanese lesson entry", async () => {
+  const source = await readFile(
+    new URL("../app/AminoAcidScanner.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /くわしく見る/);
+  assert.match(source, /AnchoredOverlay/);
 });

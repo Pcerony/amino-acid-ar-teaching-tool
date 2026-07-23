@@ -211,15 +211,15 @@ button:focus-visible {
 .guide-wrap {
   position: absolute;
   z-index: 1;
-  top: 49%;
+  top: 50%;
   left: 50%;
   width: min(78vw, 390px);
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
 }
 
-.has-result .guide-wrap {
-  top: 49%;
+.has-anchor .guide-wrap {
+  top: 50%;
   width: min(78vw, 390px);
 }
 
@@ -235,7 +235,7 @@ button:focus-visible {
     inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
-.has-result .scan-guide {
+.has-anchor .scan-guide {
   opacity: 0;
 }
 
@@ -567,6 +567,14 @@ button:focus-visible {
   margin: 3px 0 0;
   color: #65716a;
   font-size: 12px;
+}
+
+.lesson-prompt {
+  display: inline-block;
+  margin-top: 5px;
+  color: color-mix(in srgb, var(--acid-color), #17211d 35%);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .acid-name strong {

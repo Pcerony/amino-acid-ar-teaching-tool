@@ -32,6 +32,8 @@ import {
   type AminoAcid,
   type AminoAcidId,
 } from "./data/aminoAcids";
+import { MOLECULES } from "./data/molecules";
+import { AnchoredOverlay } from "./components/AnchoredOverlay";
 import {
   setTrackTorch,
   startRearCamera,
@@ -40,6 +42,11 @@ import {
   type CameraErrorKind,
 } from "./lib/camera";
 import { RecognitionConsensus } from "./lib/consensus";
+import {
+  AnchorSmoother,
+  type AnchorState,
+  type TrackedQuad,
+} from "./lib/faceTracking";
 import {
   LocalRecognizer,
   type FrameAssessment,
@@ -52,6 +59,16 @@ type ScannerPhase =
   | "scanning"
   | "recognized"
   | "error";
+
+const SEARCH_INTERVAL_MS = 250;
+const TRACK_INTERVAL_MS = 110;
+const SLOW_TRACK_INTERVAL_MS = 166;
+const DEMO_QUAD: TrackedQuad = [
+  { x: 0.13, y: 0.14 },
+  { x: 0.87, y: 0.19 },
+  { x: 0.82, y: 0.87 },
+  { x: 0.17, y: 0.82 },
+];
 
 const STATUS_TEXT: Record<ScannerPhase, string> = {
   idle: "カメラをむけてね",
@@ -103,6 +120,7 @@ function captureGuide(
   video: HTMLVideoElement,
   stage: HTMLElement,
   canvas: HTMLCanvasElement,
+  outputSize = 480,
 ) {
   const stageRect = stage.getBoundingClientRect();
   const guideSize = Math.min(stageRect.width * 0.78, 390);
@@ -122,8 +140,8 @@ function captureGuide(
   const sourceY = (stageRect.height / 2 - guideSize / 2 - offsetY) / scale;
   const sourceSize = guideSize / scale;
 
-  canvas.width = 480;
-  canvas.height = 480;
+  canvas.width = outputSize;
+  canvas.height = outputSize;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) return false;
   context.drawImage(
@@ -134,8 +152,8 @@ function captureGuide(
     Math.min(sourceSize, videoHeight),
     0,
     0,
-    480,
-    480,
+    outputSize,
+    outputSize,
   );
   return true;
 }
@@ -195,6 +213,7 @@ function LessonPanel({
           <p>
             {acid.nameEn} <strong>{acid.code}</strong>
           </p>
+          {!expanded && <span className="lesson-prompt">くわしく見る</span>}
         </div>
         <button
           className="icon-button panel-toggle"
@@ -216,26 +235,28 @@ function LessonPanel({
         </button>
       </div>
 
-      <div className="lesson-sections">
-        <article>
-          <h2>形のポイント</h2>
-          <p>
-            <RubyText text={acid.shape} />
-          </p>
-        </article>
-        <article>
-          <h2>体でのはたらき</h2>
-          <p>
-            <RubyText text={acid.role} />
-          </p>
-        </article>
-        <article>
-          <h2>おぼえ方</h2>
-          <p>
-            <RubyText text={acid.memory} />
-          </p>
-        </article>
-      </div>
+      {expanded && (
+        <div className="lesson-sections">
+          <article>
+            <h2>形のポイント</h2>
+            <p>
+              <RubyText text={acid.shape} />
+            </p>
+          </article>
+          <article>
+            <h2>体でのはたらき</h2>
+            <p>
+              <RubyText text={acid.role} />
+            </p>
+          </article>
+          <article>
+            <h2>おぼえ方</h2>
+            <p>
+              <RubyText text={acid.memory} />
+            </p>
+          </article>
+        </div>
+      )}
     </section>
   );
 }
@@ -251,6 +272,9 @@ export function AminoAcidScanner() {
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [cloudNotice, setCloudNotice] = useState(false);
   const [uploadedPreview, setUploadedPreview] = useState<string | null>(null);
+  const [trackedQuad, setTrackedQuad] = useState<TrackedQuad | null>(null);
+  const [anchorState, setAnchorState] =
+    useState<AnchorState["state"]>("lost");
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const analysisCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -262,6 +286,13 @@ export function AminoAcidScanner() {
   );
   const scanTimerRef = useRef<number | null>(null);
   const scanningRef = useRef(false);
+  const trackedIdRef = useRef<AminoAcidId | null>(null);
+  const panelExpandedRef = useRef(false);
+  const anchorSmootherRef = useRef(
+    new AnchorSmoother({ alpha: 0.35, holdMs: 400 }),
+  );
+  const analysisDurationRef = useRef<number[]>([]);
+  const anchorMissesRef = useRef(0);
   const lastCloudAtRef = useRef(0);
   const uncertainSinceRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -271,7 +302,7 @@ export function AminoAcidScanner() {
 
   const stopScanTimer = useCallback(() => {
     if (scanTimerRef.current !== null) {
-      window.clearInterval(scanTimerRef.current);
+      window.clearTimeout(scanTimerRef.current);
       scanTimerRef.current = null;
     }
   }, []);
@@ -282,6 +313,14 @@ export function AminoAcidScanner() {
     stopMediaStream(streamRef.current);
     streamRef.current = null;
     trackRef.current = null;
+    trackedIdRef.current = null;
+    anchorMissesRef.current = 0;
+    analysisDurationRef.current = [];
+    anchorSmootherRef.current.reset();
+    setTrackedQuad(null);
+    setAnchorState("lost");
+    setResultId(null);
+    setPanelExpanded(false);
     setCameraActive(false);
     if (videoRef.current) videoRef.current.srcObject = null;
     setTorchAvailable(false);
@@ -290,10 +329,21 @@ export function AminoAcidScanner() {
   }, [stopScanTimer]);
 
   const applyStableResult = useCallback(
-    (id: AminoAcidId, source: "local" | "cloud") => {
+    (
+      id: AminoAcidId,
+      source: "local" | "cloud",
+      anchor: TrackedQuad | null = null,
+    ) => {
+      trackedIdRef.current = id;
+      anchorMissesRef.current = 0;
       setResultId(id);
       setPhase("recognized");
       setPanelExpanded(false);
+      if (anchor) {
+        const next = anchorSmootherRef.current.push(anchor, Date.now());
+        setTrackedQuad(next.quad);
+        setAnchorState(next.state);
+      }
       if (source === "cloud") setCloudNotice(true);
     },
     [],
@@ -330,20 +380,61 @@ export function AminoAcidScanner() {
     if (
       scanningRef.current ||
       document.hidden ||
+      panelExpandedRef.current ||
       !videoRef.current ||
       !stageRef.current
     ) {
       return;
     }
+    const trackedId = trackedIdRef.current;
     const canvas =
       analysisCanvasRef.current ??
       (analysisCanvasRef.current = document.createElement("canvas"));
-    if (!captureGuide(videoRef.current, stageRef.current, canvas)) return;
+    if (
+      !captureGuide(
+        videoRef.current,
+        stageRef.current,
+        canvas,
+        trackedId ? 360 : 480,
+      )
+    ) {
+      return;
+    }
     scanningRef.current = true;
     try {
       const recognizer =
         recognizerRef.current ??
         (recognizerRef.current = new LocalRecognizer());
+
+      if (trackedId) {
+        const startedAt = performance.now();
+        const tracking = await recognizer.track(canvas, trackedId);
+        const durations = analysisDurationRef.current;
+        durations.push(performance.now() - startedAt);
+        analysisDurationRef.current = durations.slice(-8);
+        if (tracking) anchorMissesRef.current = 0;
+        else anchorMissesRef.current += 1;
+        const next = anchorSmootherRef.current.push(
+          tracking?.anchor ?? null,
+          Date.now(),
+        );
+        setAnchorState(next.state);
+        setTrackedQuad(next.quad);
+        if (next.state === "lost" && anchorMissesRef.current > 4) {
+          trackedIdRef.current = null;
+          anchorMissesRef.current = 0;
+          consensusRef.current.reset(true);
+          anchorSmootherRef.current.reset();
+          setResultId(null);
+          setPanelExpanded(false);
+          setPhase("scanning");
+          setQualityText(QUALITY_TEXT.ok);
+        } else {
+          setPhase("recognized");
+        }
+        return;
+      }
+
       const assessment = await recognizer.recognize(canvas);
       setQualityText(QUALITY_TEXT[assessment.quality]);
       const candidate =
@@ -353,7 +444,11 @@ export function AminoAcidScanner() {
       const stable = consensusRef.current.push(candidate);
       if (stable) {
         uncertainSinceRef.current = 0;
-        applyStableResult(stable.id, "local");
+        const anchor =
+          assessment.result?.id === stable.id
+            ? assessment.result.anchor
+            : null;
+        applyStableResult(stable.id, "local", anchor);
       } else if (assessment.quality === "ok") {
         if (!uncertainSinceRef.current) uncertainSinceRef.current = Date.now();
         if (Date.now() - uncertainSinceRef.current > 2000) {
@@ -371,14 +466,41 @@ export function AminoAcidScanner() {
 
   const beginScanLoop = useCallback(() => {
     stopScanTimer();
-    void analyzeCurrentFrame();
-    scanTimerRef.current = window.setInterval(analyzeCurrentFrame, 250);
+    const tick = async () => {
+      await analyzeCurrentFrame();
+      if (
+        !streamRef.current ||
+        document.hidden ||
+        panelExpandedRef.current
+      ) {
+        scanTimerRef.current = null;
+        return;
+      }
+      const durations = analysisDurationRef.current;
+      const averageDuration = durations.length
+        ? durations.reduce((total, value) => total + value, 0) /
+          durations.length
+        : 0;
+      const delay = trackedIdRef.current
+        ? averageDuration > 90
+          ? SLOW_TRACK_INTERVAL_MS
+          : TRACK_INTERVAL_MS
+        : SEARCH_INTERVAL_MS;
+      scanTimerRef.current = window.setTimeout(tick, delay);
+    };
+    void tick();
   }, [analyzeCurrentFrame, stopScanTimer]);
 
   const startCamera = useCallback(async () => {
     stopMediaStream(streamRef.current);
+    trackedIdRef.current = null;
+    anchorMissesRef.current = 0;
+    anchorSmootherRef.current.reset();
+    analysisDurationRef.current = [];
     setErrorKind(null);
     setResultId(null);
+    setTrackedQuad(null);
+    setAnchorState("lost");
     setCloudNotice(false);
     setUploadedPreview(null);
     consensusRef.current.reset(true);
@@ -412,8 +534,14 @@ export function AminoAcidScanner() {
   }, [beginScanLoop]);
 
   const rescan = useCallback(() => {
+    trackedIdRef.current = null;
+    anchorMissesRef.current = 0;
+    anchorSmootherRef.current.reset();
+    analysisDurationRef.current = [];
     consensusRef.current.reset(true);
     setResultId(null);
+    setTrackedQuad(null);
+    setAnchorState("lost");
     setCloudNotice(false);
     setPanelExpanded(false);
     setQualityText(QUALITY_TEXT.ok);
@@ -458,7 +586,11 @@ export function AminoAcidScanner() {
             (uploadResult.margin >= 0.045 ||
               (uploadResult.score >= 0.9 && uploadResult.margin >= 0.008));
           if (uploadResult && confidentUpload && uploadResult.inliers >= 6) {
-            applyStableResult(uploadResult.id, "local");
+            applyStableResult(
+              uploadResult.id,
+              "local",
+              uploadResult.anchor,
+            );
           } else {
             setPhase(streamRef.current ? "scanning" : "idle");
             setQualityText("まだわかりません。面を正面からうつしてみよう");
@@ -491,6 +623,15 @@ export function AminoAcidScanner() {
   }, [requestCloudFallback]);
 
   useEffect(() => {
+    panelExpandedRef.current = panelExpanded;
+    if (panelExpanded) {
+      stopScanTimer();
+    } else if (streamRef.current) {
+      beginScanLoop();
+    }
+  }, [beginScanLoop, panelExpanded, stopScanTimer]);
+
+  useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) stopScanTimer();
       else if (streamRef.current) beginScanLoop();
@@ -510,7 +651,12 @@ export function AminoAcidScanner() {
     const demo = new URLSearchParams(window.location.search).get("demo");
     if (demo && demo in AMINO_ACID_BY_ID) {
       window.setTimeout(() => {
-        setResultId(demo as AminoAcidId);
+        const id = demo as AminoAcidId;
+        trackedIdRef.current = id;
+        const next = anchorSmootherRef.current.push(DEMO_QUAD, Date.now());
+        setResultId(id);
+        setTrackedQuad(next.quad);
+        setAnchorState(next.state);
         setPhase("recognized");
       }, 0);
     }
@@ -520,8 +666,8 @@ export function AminoAcidScanner() {
     () =>
       `scanner-stage phase-${phase}${result ? " has-result" : ""}${
         cameraActive ? " camera-active" : ""
-      }`,
-    [cameraActive, phase, result],
+      }${trackedQuad ? " has-anchor" : ""}`,
+    [cameraActive, phase, result, trackedQuad],
   );
 
   return (
@@ -572,14 +718,24 @@ export function AminoAcidScanner() {
           {statusText}
         </div>
 
-        <div className="guide-wrap" aria-hidden="true">
-          <div className="scan-guide">
+        <div className="guide-wrap">
+          <div className="scan-guide" aria-hidden="true">
             <span className="corner top-left" />
             <span className="corner top-right" />
             <span className="corner bottom-left" />
             <span className="corner bottom-right" />
             {phase === "scanning" && <span className="scan-sweep" />}
           </div>
+          {result && trackedQuad && (
+            <AnchoredOverlay
+              acid={result}
+              molecule={MOLECULES[result.id]}
+              quad={trackedQuad}
+              active={anchorState === "tracked" && !panelExpanded}
+              holding={anchorState === "holding"}
+              onOpenLesson={() => setPanelExpanded(true)}
+            />
+          )}
         </div>
 
         <p className="quality-hint" aria-live="polite">
@@ -683,7 +839,7 @@ export function AminoAcidScanner() {
             acid={result}
             expanded={panelExpanded}
             onToggle={() => setPanelExpanded((value) => !value)}
-            onClose={rescan}
+            onClose={() => setPanelExpanded(false)}
           />
         )}
 

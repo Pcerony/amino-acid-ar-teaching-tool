@@ -11,6 +11,10 @@ import {
   themeColorDistance,
   type FrameQuality,
 } from "./color";
+import {
+  type TrackedQuad,
+  validateTrackedQuad,
+} from "./faceTracking";
 
 type Cv = typeof import("@techstark/opencv-js") & Record<string, any>;
 
@@ -18,6 +22,8 @@ type IndexedReference = {
   acid: AminoAcid;
   keypoints: any;
   descriptors: any;
+  width: number;
+  height: number;
 };
 
 export type LocalRecognitionResult = {
@@ -26,8 +32,16 @@ export type LocalRecognitionResult = {
   margin: number;
   goodMatches: number;
   inliers: number;
+  anchor: TrackedQuad | null;
   source: "local";
   quality: FrameQuality;
+};
+
+export type LocalTrackingResult = {
+  id: AminoAcidId;
+  goodMatches: number;
+  inliers: number;
+  anchor: TrackedQuad;
 };
 
 export type FrameAssessment = {
@@ -107,16 +121,23 @@ function extractOrb(cv: Cv, canvas: HTMLCanvasElement) {
   gray.delete();
   mask.delete();
   orb.delete();
-  return { keypoints, descriptors };
+  return {
+    keypoints,
+    descriptors,
+    width: canvas.width,
+    height: canvas.height,
+  };
 }
 
-function countInliers(
+function estimateMatchGeometry(
   cv: Cv,
   sourceKeypoints: any,
   targetKeypoints: any,
   matches: Array<{ queryIdx: number; trainIdx: number }>,
+  sourceSize: { width: number; height: number },
+  targetSize: { width: number; height: number },
 ) {
-  if (matches.length < 8) return 0;
+  if (matches.length < 8) return { inliers: 0, anchor: null };
   const sourcePoints: number[] = [];
   const targetPoints: number[] = [];
   for (const match of matches) {
@@ -140,6 +161,7 @@ function countInliers(
   const mask = new cv.Mat();
   let homography: any = null;
   let inliers = 0;
+  let anchor: TrackedQuad | null = null;
   try {
     homography = cv.findHomography(
       sourceMat,
@@ -151,24 +173,69 @@ function countInliers(
     for (let i = 0; i < mask.rows; i += 1) {
       if (mask.ucharPtr(i, 0)[0]) inliers += 1;
     }
+    if (inliers >= 6 && homography && !homography.empty()) {
+      const sourceCorners = cv.matFromArray(4, 1, cv.CV_32FC2, [
+        0,
+        0,
+        sourceSize.width,
+        0,
+        sourceSize.width,
+        sourceSize.height,
+        0,
+        sourceSize.height,
+      ]);
+      const targetCorners = new cv.Mat();
+      try {
+        cv.perspectiveTransform(sourceCorners, targetCorners, homography);
+        const values = targetCorners.data32F;
+        const candidate: TrackedQuad = [
+          {
+            x: values[0] / targetSize.width,
+            y: values[1] / targetSize.height,
+          },
+          {
+            x: values[2] / targetSize.width,
+            y: values[3] / targetSize.height,
+          },
+          {
+            x: values[4] / targetSize.width,
+            y: values[5] / targetSize.height,
+          },
+          {
+            x: values[6] / targetSize.width,
+            y: values[7] / targetSize.height,
+          },
+        ];
+        if (validateTrackedQuad(candidate).valid) anchor = candidate;
+      } finally {
+        sourceCorners.delete();
+        targetCorners.delete();
+      }
+    }
   } catch {
     inliers = 0;
+    anchor = null;
   } finally {
     homography?.delete?.();
     mask.delete();
     sourceMat.delete();
     targetMat.delete();
   }
-  return inliers;
+  return { inliers, anchor };
 }
 
 function matchReference(
   cv: Cv,
-  frame: { keypoints: any; descriptors: any },
+  frame: {
+    keypoints: any;
+    descriptors: any;
+    width: number;
+    height: number;
+  },
   reference: IndexedReference,
 ) {
   if (frame.descriptors.empty() || reference.descriptors.empty()) {
-    return { goodMatches: 0, inliers: 0 };
+    return { goodMatches: 0, inliers: 0, anchor: null };
   }
   const matcher = new cv.BFMatcher(cv.NORM_HAMMING, false);
   const knn = new cv.DMatchVectorVector();
@@ -190,15 +257,15 @@ function matchReference(
     knn.delete();
     matcher.delete();
   }
-  return {
-    goodMatches: good.length,
-    inliers: countInliers(
-      cv,
-      reference.keypoints,
-      frame.keypoints,
-      good,
-    ),
-  };
+  const geometry = estimateMatchGeometry(
+    cv,
+    reference.keypoints,
+    frame.keypoints,
+    good,
+    reference,
+    frame,
+  );
+  return { goodMatches: good.length, ...geometry };
 }
 
 export class LocalRecognizer {
@@ -215,6 +282,35 @@ export class LocalRecognizer {
       const features = extractOrb(this.cv!, drawSquare(image));
       return { acid: AMINO_ACIDS[index], ...features };
     });
+  }
+
+  private referenceForId(id: AminoAcidId) {
+    return this.references.find(({ acid }) => acid.id === id) ?? null;
+  }
+
+  async track(
+    canvas: HTMLCanvasElement,
+    id: AminoAcidId,
+  ): Promise<LocalTrackingResult | null> {
+    await this.initialize();
+    const reference = this.referenceForId(id);
+    if (!reference || !this.cv) return null;
+    const frameCanvas =
+      canvas.width === canvas.height ? canvas : drawSquare(canvas, 360);
+    const frame = extractOrb(this.cv, frameCanvas);
+    try {
+      const matched = matchReference(this.cv, frame, reference);
+      if (matched.inliers < 6 || !matched.anchor) return null;
+      return {
+        id,
+        goodMatches: matched.goodMatches,
+        inliers: matched.inliers,
+        anchor: matched.anchor,
+      };
+    } finally {
+      frame.keypoints.delete();
+      frame.descriptors.delete();
+    }
   }
 
   async recognize(canvas: HTMLCanvasElement): Promise<FrameAssessment> {

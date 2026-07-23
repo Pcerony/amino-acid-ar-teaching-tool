@@ -11,6 +11,10 @@ test("local recognizer exposes normalized planar anchors and target-only trackin
   assert.match(source, /perspectiveTransform/);
   assert.match(source, /async track\(/);
   assert.match(source, /referenceForId/);
+  assert.doesNotMatch(
+    source,
+    /matched\.inliers < 6 \|\| !matched\.anchor/,
+  );
 });
 
 test("molecule viewer lazy-loads Three and enforces the mobile render budget", async () => {
@@ -23,6 +27,7 @@ test("molecule viewer lazy-loads Three and enforces the mobile render budget", a
   assert.match(source, /powerPreference:\s*"low-power"/);
   assert.match(source, /antialias:\s*false/);
   assert.match(source, /projectMolecule/);
+  assert.match(source, /1000\s*\/\s*20/);
 });
 
 test("anchored overlay uses the selected ring layout and projective matrix", async () => {

@@ -12,6 +12,22 @@ export type AnchorState = {
   quad: TrackedQuad | null;
 };
 
+export function shouldReleaseTarget(
+  lastSeenAt: number,
+  now: number,
+  timeoutMs: number,
+) {
+  return lastSeenAt > 0 && now - lastSeenAt >= timeoutMs;
+}
+
+export function nextScanDelay(
+  targetIntervalMs: number,
+  analysisElapsedMs: number,
+  minIdleMs = 24,
+) {
+  return Math.max(minIdleMs, targetIntervalMs - analysisElapsedMs);
+}
+
 function signedArea(points: readonly Point2[]) {
   let total = 0;
   for (let index = 0; index < points.length; index += 1) {

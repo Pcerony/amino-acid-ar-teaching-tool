@@ -41,7 +41,7 @@ export type LocalTrackingResult = {
   id: AminoAcidId;
   goodMatches: number;
   inliers: number;
-  anchor: TrackedQuad;
+  anchor: TrackedQuad | null;
 };
 
 export type FrameAssessment = {
@@ -300,7 +300,7 @@ export class LocalRecognizer {
     const frame = extractOrb(this.cv, frameCanvas);
     try {
       const matched = matchReference(this.cv, frame, reference);
-      if (matched.inliers < 6 || !matched.anchor) return null;
+      if (matched.inliers < 6) return null;
       return {
         id,
         goodMatches: matched.goodMatches,

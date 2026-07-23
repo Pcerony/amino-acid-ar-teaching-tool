@@ -8,10 +8,17 @@ test("scanner uses separate search and target-tracking cadences", async () => {
     "utf8",
   );
   assert.match(source, /SEARCH_INTERVAL_MS\s*=\s*250/);
-  assert.match(source, /TRACK_INTERVAL_MS\s*=\s*110/);
-  assert.match(source, /SLOW_TRACK_INTERVAL_MS\s*=\s*166/);
+  assert.match(source, /TRACK_INTERVAL_MS\s*=\s*180/);
+  assert.match(source, /SLOW_TRACK_INTERVAL_MS\s*=\s*250/);
   assert.match(source, /recognizer\.track/);
   assert.match(source, /AnchorSmoother/);
+  assert.match(source, /shouldReleaseTarget/);
+  assert.match(source, /lastPoseSeenAtRef/);
+  assert.match(source, /nextScanDelay/);
+  assert.doesNotMatch(
+    source,
+    /next\.state === "lost" && anchorMissesRef\.current > 4/,
+  );
 });
 
 test("scanner pauses expensive work while the lesson is expanded or the page is hidden", async () => {

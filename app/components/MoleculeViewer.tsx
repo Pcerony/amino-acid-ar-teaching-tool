@@ -251,7 +251,7 @@ export function MoleculeViewer({
             return;
           }
           animationFrame = window.requestAnimationFrame(render);
-          if (now - lastFrameAt < 1000 / 30) return;
+          if (now - lastFrameAt < 1000 / 20) return;
           if (!reducedMotion && lastFrameAt) {
             group.rotation.y += ((now - lastFrameAt) / 1000) * 0.22;
           }

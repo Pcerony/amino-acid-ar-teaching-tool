@@ -44,6 +44,8 @@ import {
 import { RecognitionConsensus } from "./lib/consensus";
 import {
   AnchorSmoother,
+  nextScanDelay,
+  shouldReleaseTarget,
   type AnchorState,
   type TrackedQuad,
 } from "./lib/faceTracking";
@@ -61,8 +63,9 @@ type ScannerPhase =
   | "error";
 
 const SEARCH_INTERVAL_MS = 250;
-const TRACK_INTERVAL_MS = 110;
-const SLOW_TRACK_INTERVAL_MS = 166;
+const TRACK_INTERVAL_MS = 180;
+const SLOW_TRACK_INTERVAL_MS = 250;
+const TRACK_RELEASE_TIMEOUT_MS = 2400;
 const DEMO_QUAD: TrackedQuad = [
   { x: 0.13, y: 0.14 },
   { x: 0.87, y: 0.19 },
@@ -289,10 +292,11 @@ export function AminoAcidScanner() {
   const trackedIdRef = useRef<AminoAcidId | null>(null);
   const panelExpandedRef = useRef(false);
   const anchorSmootherRef = useRef(
-    new AnchorSmoother({ alpha: 0.35, holdMs: 400 }),
+    new AnchorSmoother({ alpha: 0.35, holdMs: 1200 }),
   );
   const analysisDurationRef = useRef<number[]>([]);
-  const anchorMissesRef = useRef(0);
+  const lastIdentitySeenAtRef = useRef(0);
+  const lastPoseSeenAtRef = useRef(0);
   const lastCloudAtRef = useRef(0);
   const uncertainSinceRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -314,7 +318,8 @@ export function AminoAcidScanner() {
     streamRef.current = null;
     trackRef.current = null;
     trackedIdRef.current = null;
-    anchorMissesRef.current = 0;
+    lastIdentitySeenAtRef.current = 0;
+    lastPoseSeenAtRef.current = 0;
     analysisDurationRef.current = [];
     anchorSmootherRef.current.reset();
     setTrackedQuad(null);
@@ -334,13 +339,15 @@ export function AminoAcidScanner() {
       source: "local" | "cloud",
       anchor: TrackedQuad | null = null,
     ) => {
+      const seenAt = Date.now();
       trackedIdRef.current = id;
-      anchorMissesRef.current = 0;
+      lastIdentitySeenAtRef.current = seenAt;
+      lastPoseSeenAtRef.current = seenAt;
       setResultId(id);
       setPhase("recognized");
       setPanelExpanded(false);
       if (anchor) {
-        const next = anchorSmootherRef.current.push(anchor, Date.now());
+        const next = anchorSmootherRef.current.push(anchor, seenAt);
         setTrackedQuad(next.quad);
         setAnchorState(next.state);
       }
@@ -412,22 +419,34 @@ export function AminoAcidScanner() {
         const durations = analysisDurationRef.current;
         durations.push(performance.now() - startedAt);
         analysisDurationRef.current = durations.slice(-8);
-        if (tracking) anchorMissesRef.current = 0;
-        else anchorMissesRef.current += 1;
+        const now = Date.now();
+        if (tracking) lastIdentitySeenAtRef.current = now;
+        if (tracking?.anchor) lastPoseSeenAtRef.current = now;
         const next = anchorSmootherRef.current.push(
           tracking?.anchor ?? null,
-          Date.now(),
+          now,
         );
         setAnchorState(next.state);
         setTrackedQuad(next.quad);
-        if (next.state === "lost" && anchorMissesRef.current > 4) {
+        const identityExpired = shouldReleaseTarget(
+          lastIdentitySeenAtRef.current,
+          now,
+          TRACK_RELEASE_TIMEOUT_MS,
+        );
+        const poseExpired = shouldReleaseTarget(
+          lastPoseSeenAtRef.current,
+          now,
+          TRACK_RELEASE_TIMEOUT_MS,
+        );
+        if ((!tracking || !tracking.anchor) && (identityExpired || poseExpired)) {
           trackedIdRef.current = null;
-          anchorMissesRef.current = 0;
+          lastIdentitySeenAtRef.current = 0;
+          lastPoseSeenAtRef.current = 0;
           consensusRef.current.reset(true);
           anchorSmootherRef.current.reset();
-          setResultId(null);
-          setPanelExpanded(false);
-          setPhase("scanning");
+          setTrackedQuad(null);
+          setAnchorState("lost");
+          setPhase("recognized");
           setQualityText(QUALITY_TEXT.ok);
         } else {
           setPhase("recognized");
@@ -467,7 +486,9 @@ export function AminoAcidScanner() {
   const beginScanLoop = useCallback(() => {
     stopScanTimer();
     const tick = async () => {
+      const startedAt = performance.now();
       await analyzeCurrentFrame();
+      const analysisElapsed = performance.now() - startedAt;
       if (
         !streamRef.current ||
         document.hidden ||
@@ -481,11 +502,12 @@ export function AminoAcidScanner() {
         ? durations.reduce((total, value) => total + value, 0) /
           durations.length
         : 0;
-      const delay = trackedIdRef.current
+      const targetInterval = trackedIdRef.current
         ? averageDuration > 90
           ? SLOW_TRACK_INTERVAL_MS
           : TRACK_INTERVAL_MS
         : SEARCH_INTERVAL_MS;
+      const delay = nextScanDelay(targetInterval, analysisElapsed);
       scanTimerRef.current = window.setTimeout(tick, delay);
     };
     void tick();
@@ -494,7 +516,8 @@ export function AminoAcidScanner() {
   const startCamera = useCallback(async () => {
     stopMediaStream(streamRef.current);
     trackedIdRef.current = null;
-    anchorMissesRef.current = 0;
+    lastIdentitySeenAtRef.current = 0;
+    lastPoseSeenAtRef.current = 0;
     anchorSmootherRef.current.reset();
     analysisDurationRef.current = [];
     setErrorKind(null);
@@ -535,7 +558,8 @@ export function AminoAcidScanner() {
 
   const rescan = useCallback(() => {
     trackedIdRef.current = null;
-    anchorMissesRef.current = 0;
+    lastIdentitySeenAtRef.current = 0;
+    lastPoseSeenAtRef.current = 0;
     anchorSmootherRef.current.reset();
     analysisDurationRef.current = [];
     consensusRef.current.reset(true);
@@ -653,7 +677,10 @@ export function AminoAcidScanner() {
       window.setTimeout(() => {
         const id = demo as AminoAcidId;
         trackedIdRef.current = id;
-        const next = anchorSmootherRef.current.push(DEMO_QUAD, Date.now());
+        const seenAt = Date.now();
+        lastIdentitySeenAtRef.current = seenAt;
+        lastPoseSeenAtRef.current = seenAt;
+        const next = anchorSmootherRef.current.push(DEMO_QUAD, seenAt);
         setResultId(id);
         setTrackedQuad(next.quad);
         setAnchorState(next.state);

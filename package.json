@@ -12,7 +12,7 @@
     "molecules:generate": "node scripts/fetch-molecules.mjs",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next --ignore-pattern public/vendor/opencv.js",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next --ignore-pattern .worktrees --ignore-pattern public/vendor/opencv.js",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

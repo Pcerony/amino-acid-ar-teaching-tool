@@ -12,3 +12,15 @@ test("local recognizer exposes normalized planar anchors and target-only trackin
   assert.match(source, /async track\(/);
   assert.match(source, /referenceForId/);
 });
+
+test("molecule viewer lazy-loads Three and enforces the mobile render budget", async () => {
+  const source = await readFile(
+    new URL("../app/components/MoleculeViewer.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /import\("three"\)/);
+  assert.match(source, /Math\.min\(window\.devicePixelRatio,\s*1\.25\)/);
+  assert.match(source, /powerPreference:\s*"low-power"/);
+  assert.match(source, /antialias:\s*false/);
+  assert.match(source, /projectMolecule/);
+});

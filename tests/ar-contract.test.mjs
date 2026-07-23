@@ -24,3 +24,14 @@ test("molecule viewer lazy-loads Three and enforces the mobile render budget", a
   assert.match(source, /antialias:\s*false/);
   assert.match(source, /projectMolecule/);
 });
+
+test("anchored overlay uses the selected ring layout and projective matrix", async () => {
+  const source = await readFile(
+    new URL("../app/components/AnchoredOverlay.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /cssMatrixForQuad/);
+  assert.match(source, /MoleculeViewer/);
+  assert.match(source, /aria-label=.*学習カード/);
+  assert.match(source, /ar-anchor-ring/);
+});

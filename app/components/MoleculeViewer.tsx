@@ -104,6 +104,7 @@ export function MoleculeViewer({
     null,
   );
   const [fallback, setFallback] = useState(false);
+  const [threeReady, setThreeReady] = useState(false);
 
   useEffect(() => {
     activeRef.current = active;
@@ -130,6 +131,7 @@ export function MoleculeViewer({
     };
 
     setFallback(false);
+    setThreeReady(false);
     void import("three")
       .then((THREE) => {
         if (disposed) return;
@@ -270,14 +272,25 @@ export function MoleculeViewer({
           if (document.hidden) stop();
           else start();
         };
+        const handleContextLost = (event: Event) => {
+          event.preventDefault();
+          if (disposed) return;
+          if (animationFrame) window.cancelAnimationFrame(animationFrame);
+          animationFrame = 0;
+          setThreeReady(false);
+          setFallback(true);
+        };
         document.addEventListener("visibilitychange", handleVisibility);
+        canvas.addEventListener("webglcontextlost", handleContextLost, false);
         controlsRef.current = { start, stop };
         if (activeRef.current) start();
         else renderOnce();
+        setThreeReady(true);
         setFallback(false);
 
         cleanup = () => {
           document.removeEventListener("visibilitychange", handleVisibility);
+          canvas.removeEventListener("webglcontextlost", handleContextLost);
           stop();
           controlsRef.current = null;
           disposed = true;
@@ -289,7 +302,10 @@ export function MoleculeViewer({
         };
       })
       .catch(() => {
-        if (!disposed) setFallback(true);
+        if (!disposed) {
+          setThreeReady(false);
+          setFallback(true);
+        }
       });
 
     let cleanup = () => {
@@ -305,14 +321,19 @@ export function MoleculeViewer({
     return () => cleanup();
   }, [molecule, theme]);
 
-  if (fallback) return <MoleculeFallback molecule={molecule} theme={theme} />;
   return (
-    <canvas
-      ref={canvasRef}
-      className="molecule-canvas"
-      width="220"
-      height="220"
-      aria-label="3D分子構造"
-    />
+    <span className="molecule-viewer">
+      <canvas
+        ref={canvasRef}
+        className="molecule-canvas"
+        width="220"
+        height="220"
+        aria-label="3D分子構造"
+        aria-hidden={!threeReady || fallback}
+      />
+      {(!threeReady || fallback) && (
+        <MoleculeFallback molecule={molecule} theme={theme} />
+      )}
+    </span>
   );
 }

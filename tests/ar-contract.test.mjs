@@ -28,6 +28,8 @@ test("molecule viewer lazy-loads Three and enforces the mobile render budget", a
   assert.match(source, /antialias:\s*false/);
   assert.match(source, /projectMolecule/);
   assert.match(source, /1000\s*\/\s*20/);
+  assert.match(source, /!threeReady \|\| fallback/);
+  assert.match(source, /webglcontextlost/);
 });
 
 test("anchored overlay uses the selected ring layout and projective matrix", async () => {

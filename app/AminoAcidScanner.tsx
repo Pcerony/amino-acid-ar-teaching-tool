@@ -292,7 +292,7 @@ export function AminoAcidScanner() {
   const trackedIdRef = useRef<AminoAcidId | null>(null);
   const panelExpandedRef = useRef(false);
   const anchorSmootherRef = useRef(
-    new AnchorSmoother({ alpha: 0.35, holdMs: 1200 }),
+    new AnchorSmoother({ alpha: 0.35, holdMs: 2400 }),
   );
   const analysisDurationRef = useRef<number[]>([]);
   const lastIdentitySeenAtRef = useRef(0);

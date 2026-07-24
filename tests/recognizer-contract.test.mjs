@@ -14,7 +14,7 @@ test("local recognizer exposes a closed-set normalized result", async () => {
   assert.match(source, /inliers/);
   assert.match(source, /findHomography/);
   assert.match(source, /NORM_HAMMING/);
-  assert.equal(AMINO_ACID_IDS.length, 8);
+  assert.equal(AMINO_ACID_IDS.length, 20);
 });
 
 test("camera teardown stops every media track", async () => {

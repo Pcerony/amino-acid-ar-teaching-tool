@@ -76,7 +76,7 @@ const DEMO_QUAD: TrackedQuad = [
 const STATUS_TEXT: Record<ScannerPhase, string> = {
   idle: "カメラをむけてね",
   requesting: "カメラをじゅんび中",
-  indexing: "8つの形をおぼえています",
+  indexing: "20この形をおぼえています",
   scanning: "見つけています",
   recognized: "わかった！",
   error: "カメラを使えません",

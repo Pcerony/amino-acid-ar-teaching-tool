@@ -7,9 +7,9 @@ import {
   isAminoAcidId,
 } from "../app/data/aminoAcids.ts";
 
-test("contains exactly the eight printed amino-acid faces", async () => {
-  assert.equal(AMINO_ACIDS.length, 8);
-  assert.equal(new Set(AMINO_ACIDS.map((acid) => acid.id)).size, 8);
+test("contains exactly the twenty printed amino-acid faces", async () => {
+  assert.equal(AMINO_ACIDS.length, 20);
+  assert.equal(new Set(AMINO_ACIDS.map((acid) => acid.id)).size, 20);
   assert.deepEqual(
     AMINO_ACIDS.map((acid) => acid.id),
     [...AMINO_ACID_IDS],
@@ -25,5 +25,5 @@ test("contains exactly the eight printed amino-acid faces", async () => {
     assert.equal(isAminoAcidId(acid.id), true);
     await access(new URL(`../public/${acid.referencePath}`, import.meta.url));
   }
-  assert.equal(isAminoAcidId("glycine"), false);
+  assert.equal(isAminoAcidId("glycine"), true);
 });

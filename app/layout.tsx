@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "アミノずかんカメラ",
-  description: "8つのアミノ酸をカメラで見つけて学ぼう。",
+  description: "20このアミノ酸をカメラで見つけて学ぼう。",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

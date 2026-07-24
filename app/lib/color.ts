@@ -84,11 +84,63 @@ export function themeColorDistance(
   profile: ColorProfile,
   rgb: readonly [number, number, number],
 ) {
-  const theme = rgbToHsv(rgb[0], rgb[1], rgb[2]);
-  const hue = hueDistance(profile.hue, theme.hue) / 180;
-  const saturation = Math.abs(profile.saturation - theme.saturation);
-  const value = Math.abs(profile.value - theme.value);
+  return colorProfileDistance(profile, rgbToHsv(rgb[0], rgb[1], rgb[2]));
+}
+
+export function colorProfileDistance(
+  profile: ColorProfile,
+  target: Pick<ColorProfile, "hue" | "saturation" | "value">,
+) {
+  const hue = hueDistance(profile.hue, target.hue) / 180;
+  const saturation = Math.abs(profile.saturation - target.saturation);
+  const value = Math.abs(profile.value - target.value);
   return Math.min(1, hue * 0.65 + saturation * 0.2 + value * 0.15);
+}
+
+export type ReferenceColorEntry = {
+  id: string;
+  themeRgb: readonly [number, number, number];
+  colorProfile: ColorProfile;
+};
+
+export function rankReferenceCandidates(
+  profile: ColorProfile,
+  references: readonly ReferenceColorEntry[],
+  limit = 8,
+) {
+  return references
+    .map((reference) => {
+      const imageDistance = colorProfileDistance(
+        profile,
+        reference.colorProfile,
+      );
+      const themeDistance = themeColorDistance(
+        profile,
+        reference.themeRgb,
+      );
+      return {
+        id: reference.id,
+        reference,
+        colorDistance: imageDistance * 0.8 + themeDistance * 0.2,
+      };
+    })
+    .sort((a, b) => a.colorDistance - b.colorDistance)
+    .slice(0, limit);
+}
+
+/**
+ * Keep the original low-match sensitivity while rewarding strong geometric
+ * support, so a near-colour false match cannot tie an exact reference match.
+ */
+export function featureSupportScore(inliers: number, goodMatches: number) {
+  const inlierSupport = Math.min(1, Math.max(0, inliers) / 14);
+  const highInlierSupport = Math.min(1, Math.max(0, inliers) / 120);
+  let score =
+    inlierSupport * 0.8 +
+    highInlierSupport * 0.05 +
+    Math.min(1, Math.max(0, goodMatches) / 60) * 0.15;
+  if (inliers < 6) score *= 0.4;
+  return score;
 }
 
 export function assessFrameQuality(

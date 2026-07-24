@@ -7,7 +7,10 @@ import {
 } from "../data/aminoAcids";
 import {
   assessFrameQuality,
+  colorProfileDistance,
+  featureSupportScore,
   profileImageData,
+  rankReferenceCandidates,
   themeColorDistance,
   type FrameQuality,
 } from "./color";
@@ -20,11 +23,20 @@ type Cv = typeof import("@techstark/opencv-js") & Record<string, any>;
 
 type IndexedReference = {
   acid: AminoAcid;
+  colorProfile: {
+    hue: number;
+    saturation: number;
+    value: number;
+    validPixels: number;
+  };
   keypoints: any;
   descriptors: any;
   width: number;
   height: number;
 };
+
+const COLOR_CANDIDATE_LIMIT = 8;
+const FULL_SWEEP_COOLDOWN_MS = 700;
 
 export type LocalRecognitionResult = {
   id: AminoAcidId;
@@ -271,6 +283,7 @@ function matchReference(
 export class LocalRecognizer {
   private cv: Cv | null = null;
   private references: IndexedReference[] = [];
+  private lastFullSweepAt = Number.NEGATIVE_INFINITY;
 
   async initialize() {
     if (this.references.length) return;
@@ -279,8 +292,22 @@ export class LocalRecognizer {
       AMINO_ACIDS.map((acid) => loadImage(acid.referencePath)),
     );
     this.references = images.map((image, index) => {
-      const features = extractOrb(this.cv!, drawSquare(image));
-      return { acid: AMINO_ACIDS[index], ...features };
+      const square = drawSquare(image);
+      const context = square.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Reference canvas is unavailable");
+      const pixels = context.getImageData(
+        0,
+        0,
+        square.width,
+        square.height,
+      );
+      const colorProfile = profileImageData(
+        pixels.data,
+        pixels.width,
+        pixels.height,
+      );
+      const features = extractOrb(this.cv!, square);
+      return { acid: AMINO_ACIDS[index], colorProfile, ...features };
     });
   }
 
@@ -343,30 +370,70 @@ export class LocalRecognizer {
         : drawSquare(canvas);
     const frame = extractOrb(cv, frameCanvas);
     try {
-      const candidates = this.references
-        .map((reference) => ({
-          reference,
-          colorDistance: themeColorDistance(
-            profile,
-            reference.acid.themeRgb,
-          ),
-        }))
-        .sort((a, b) => a.colorDistance - b.colorDistance)
-        .slice(0, 3)
-        .map(({ reference, colorDistance }) => {
-          const matched = matchReference(cv, frame, reference);
-          let featureScore =
-            Math.min(1, matched.inliers / 14) * 0.85 +
-            Math.min(1, matched.goodMatches / 60) * 0.15;
-          if (matched.inliers < 6) featureScore *= 0.4;
-          const colorScore = 1 - colorDistance;
-          return {
-            id: reference.acid.id,
-            score: featureScore * 0.55 + colorScore * 0.45,
-            ...matched,
-          };
-        })
-        .sort((a, b) => b.score - a.score);
+      const colorEntries = this.references.map(
+        ({ acid, colorProfile }) => ({
+          id: acid.id,
+          themeRgb: acid.themeRgb,
+          colorProfile,
+        }),
+      );
+      const shortlistIds = rankReferenceCandidates(
+        profile,
+        colorEntries,
+        COLOR_CANDIDATE_LIMIT,
+      ).map(({ id }) => id);
+      const shortlistIdSet = new Set(shortlistIds);
+      const shortlist = this.references.filter(({ acid }) =>
+        shortlistIdSet.has(acid.id),
+      );
+
+      const evaluate = (references: readonly IndexedReference[]) =>
+        references
+          .map((reference) => {
+            const matched = matchReference(cv, frame, reference);
+            const featureScore = featureSupportScore(
+              matched.inliers,
+              matched.goodMatches,
+            );
+            const imageDistance = colorProfileDistance(
+              profile,
+              reference.colorProfile,
+            );
+            const themeDistance = themeColorDistance(
+              profile,
+              reference.acid.themeRgb,
+            );
+            const colorDistance = imageDistance * 0.8 + themeDistance * 0.2;
+            const colorScore = 1 - colorDistance;
+            return {
+              id: reference.acid.id,
+              score: featureScore * 0.55 + colorScore * 0.45,
+              ...matched,
+            };
+          })
+          .sort((a, b) => b.score - a.score);
+
+      let candidates = evaluate(shortlist);
+      const winnerBeforeSweep = candidates[0];
+      const runnerUpBeforeSweep = candidates[1];
+      const weakWinner =
+        !winnerBeforeSweep ||
+        winnerBeforeSweep.inliers < 8 ||
+        winnerBeforeSweep.score < 0.56 ||
+        winnerBeforeSweep.score - (runnerUpBeforeSweep?.score ?? 0) < 0.025;
+      const now = performance.now();
+      const canFullSweep =
+        now - this.lastFullSweepAt >= FULL_SWEEP_COOLDOWN_MS;
+      if (weakWinner && canFullSweep && shortlist.length < this.references.length) {
+        this.lastFullSweepAt = now;
+        const shortlistIds = new Set(shortlist.map(({ acid }) => acid.id));
+        const remaining = evaluate(
+          this.references.filter(({ acid }) => !shortlistIds.has(acid.id)),
+        );
+        candidates = [...candidates, ...remaining].sort(
+          (a, b) => b.score - a.score,
+        );
+      }
 
       const winner = candidates[0];
       const runnerUp = candidates[1];
@@ -392,5 +459,6 @@ export class LocalRecognizer {
       descriptors.delete();
     });
     this.references = [];
+    this.lastFullSweepAt = Number.NEGATIVE_INFINITY;
   }
 }

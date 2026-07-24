@@ -21,6 +21,18 @@ test("scanner uses separate search and target-tracking cadences", async () => {
   );
 });
 
+test("local recognition limits full sweeps with a cooldown", async () => {
+  const source = await readFile(
+    new URL("../app/lib/localRecognizer.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /COLOR_CANDIDATE_LIMIT\s*=\s*8/);
+  assert.match(source, /FULL_SWEEP_COOLDOWN_MS\s*=\s*700/);
+  assert.match(source, /lastFullSweepAt/);
+  assert.match(source, /canFullSweep/);
+  assert.match(source, /this\.references\.filter\(\(\{ acid \}\) => !shortlistIds\.has\(acid\.id\)\)/);
+});
+
 test("scanner pauses expensive work while the lesson is expanded or the page is hidden", async () => {
   const source = await readFile(
     new URL("../app/AminoAcidScanner.tsx", import.meta.url),

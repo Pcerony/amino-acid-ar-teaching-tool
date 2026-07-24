@@ -14,6 +14,10 @@ test("local recognizer exposes a closed-set normalized result", async () => {
   assert.match(source, /inliers/);
   assert.match(source, /findHomography/);
   assert.match(source, /NORM_HAMMING/);
+  assert.match(source, /COLOR_CANDIDATE_LIMIT\s*=\s*8/);
+  assert.match(source, /FULL_SWEEP_COOLDOWN_MS\s*=\s*700/);
+  assert.match(source, /rankReferenceCandidates/);
+  assert.match(source, /colorProfile/);
   assert.equal(AMINO_ACID_IDS.length, 20);
 });
 

@@ -1116,6 +1116,7 @@ export function AminoAcidScanner() {
 
   const rescan = useCallback(() => {
     stopScanTimer();
+    scanningRef.current = false;
     scanGenerationRef.current += 1;
     cloudRequestTokenRef.current += 1;
     recognizerInitializingRef.current = false;
@@ -1164,7 +1165,7 @@ export function AminoAcidScanner() {
       if (!isCurrentGeneration(generation) || trackRef.current !== track) {
         return;
       }
-      setTorchAvailable(false);
+      setTorchEnabled((prev) => !prev);
     }
   }, [isCurrentGeneration, torchEnabled]);
 
@@ -1312,10 +1313,31 @@ export function AminoAcidScanner() {
     const generation = scanGenerationRef.current;
     const video = videoRef.current;
     const stage = stageRef.current;
+    if (!video) return;
     const canvas =
       analysisCanvasRef.current ??
       (analysisCanvasRef.current = document.createElement("canvas"));
-    if (video && stage && captureGuide(video, stage, canvas)) {
+
+    let captured = false;
+    if (stage && captureGuide(video, stage, canvas)) {
+      captured = true;
+    } else if (video.videoWidth && video.videoHeight) {
+      canvas.width = 480;
+      canvas.height = 480;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (context) {
+        context.drawImage(video, 0, 0, 480, 480);
+        captured = true;
+      }
+    }
+
+    if (captured || video.readyState >= 2) {
+      if (!captured) {
+        canvas.width = 480;
+        canvas.height = 480;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context?.drawImage(video, 0, 0, 480, 480);
+      }
       void requestCloudFallback(canvas, true, generation);
       if (!isCurrentGeneration(generation)) return;
       setQualityText("1まいの写真で、もう一度たしかめています");

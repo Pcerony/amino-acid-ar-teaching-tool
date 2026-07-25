@@ -617,10 +617,17 @@ button:focus-visible {
 .amino-list-close {
   width: 40px;
   height: 40px;
-  border-color: #c4dbce;
-  background: #eff8f2;
-  color: #2f654e;
-  backdrop-filter: none;
+  border: 1px solid #c4dbce !important;
+  background: #f0f7f3 !important;
+  color: #24523f !important;
+  backdrop-filter: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+.amino-list-close:hover,
+.amino-list-close:active {
+  background: #deeee5 !important;
+  color: #17382a !important;
 }
 
 .amino-list-grid {
@@ -1085,11 +1092,12 @@ button:focus-visible {
 
 .camera-controls {
   position: absolute;
-  z-index: 4;
+  z-index: 30;
   right: max(15px, env(safe-area-inset-right));
   bottom: max(72px, calc(env(safe-area-inset-bottom) + 54px));
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  pointer-events: auto;
 }
 
 .has-result .camera-controls {
@@ -1098,11 +1106,28 @@ button:focus-visible {
 }
 
 .control-button {
-  background: rgba(8, 12, 10, 0.74);
+  position: relative;
+  z-index: 31;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 50%;
+  background: rgba(14, 19, 17, 0.85);
+  color: #ffffff;
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.control-button:active {
+  transform: scale(0.92);
 }
 
 .control-button.is-active {
   border-color: #ffe17e;
+  background: rgba(48, 42, 18, 0.88);
   color: #ffe17e;
 }
 

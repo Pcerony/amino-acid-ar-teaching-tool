@@ -1092,46 +1092,7 @@ button:focus-visible {
   bottom: max(32px, env(safe-area-inset-bottom));
 }
 
-.camera-controls {
-  position: absolute;
-  z-index: 99 !important;
-  right: max(15px, env(safe-area-inset-right));
-  bottom: max(72px, calc(env(safe-area-inset-bottom) + 54px));
-  display: grid;
-  gap: 12px;
-  pointer-events: auto !important;
-}
 
-.has-result .camera-controls {
-  right: max(14px, env(safe-area-inset-right));
-  bottom: min(43vh, 380px);
-}
-
-.control-button {
-  position: relative;
-  z-index: 100 !important;
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.36);
-  border-radius: 50%;
-  background: rgba(14, 19, 17, 0.85);
-  color: #ffffff;
-  backdrop-filter: blur(12px);
-  cursor: pointer;
-  pointer-events: auto !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  transition: transform 120ms ease, background 120ms ease;
-}
-
-.control-button:active {
-  transform: scale(0.92);
-}
-
-.control-button.is-active {
-  border-color: #ffe17e;
-  background: rgba(48, 42, 18, 0.88);
-  color: #ffe17e;
-}
 
 .fortune-card {
   --acid-color: #93e2bd;

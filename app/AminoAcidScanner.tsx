@@ -5,15 +5,10 @@
 /* eslint-disable @next/next/no-img-element */
 
 import {
-  Aperture,
   BookOpen,
   Camera,
   ChevronDown,
   ChevronUp,
-  Flashlight,
-  FlashlightOff,
-  ImagePlus,
-  RefreshCw,
   ScanLine,
   ShieldCheck,
   Sparkles,
@@ -1604,39 +1599,7 @@ export function AminoAcidScanner() {
           </div>
         )}
 
-        {cameraActive && (
-          <nav className="camera-controls" aria-label="カメラの操作">
-            {torchAvailable && (
-              <button
-                className={`control-button ${torchEnabled ? "is-active" : ""}`}
-                type="button"
-                onClick={toggleTorch}
-                aria-label={torchEnabled ? "ライトを消す" : "ライトをつける"}
-                title={torchEnabled ? "ライトを消す" : "ライトをつける"}
-              >
-                {torchEnabled ? <FlashlightOff /> : <Flashlight />}
-              </button>
-            )}
-            <button
-              className="control-button"
-              type="button"
-              onClick={manualSnapshot}
-              aria-label="写真1まいで確認する"
-              title="写真で確認"
-            >
-              <Aperture />
-            </button>
-            <button
-              className="control-button"
-              type="button"
-              onClick={rescan}
-              aria-label="もう一度見つける"
-              title="もう一度"
-            >
-              <RefreshCw />
-            </button>
-          </nav>
-        )}
+
 
         <input
           ref={fileInputRef}

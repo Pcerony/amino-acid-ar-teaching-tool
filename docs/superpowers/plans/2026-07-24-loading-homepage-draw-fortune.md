@@ -51,7 +51,8 @@ test("keeps four named stages in order", () => {
 });
 
 test("weights progress and continues after an optional failure", () => {
-  const state = updateLoadingStage(initialLoadingState(), "art", { progress: 0.5, status: "loading" });
+  const readyShell = updateLoadingStage(initialLoadingState(), "shell", { progress: 1, status: "ready" });
+  const state = updateLoadingStage(readyShell, "art", { progress: 0.5, status: "loading" });
   const degraded = updateLoadingStage(state, "art", { progress: 1, status: "failed", message: "図案を読み込めません" });
   assert.equal(overallLoadingPercent(degraded), 50);
   assert.equal(degraded.failedStage, "art");

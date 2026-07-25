@@ -6,6 +6,7 @@
 
 import {
   Aperture,
+  BookOpen,
   Camera,
   ChevronDown,
   ChevronUp,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   ScanLine,
   ShieldCheck,
+  Sparkles,
   Square,
   X,
 } from "lucide-react";
@@ -29,11 +31,19 @@ import {
 } from "react";
 import {
   AMINO_ACID_BY_ID,
+  AMINO_ACID_IDS,
+  AMINO_ACIDS,
   type AminoAcid,
   type AminoAcidId,
 } from "./data/aminoAcids";
 import { MOLECULES } from "./data/molecules";
+import { FORTUNES } from "./data/fortunes";
 import { AnchoredOverlay } from "./components/AnchoredOverlay";
+import { FortuneCard } from "./components/FortuneCard";
+import {
+  LoadingProgressBanner,
+  LoadingScreen,
+} from "./components/LoadingScreen";
 import {
   setTrackTorch,
   startRearCamera,
@@ -53,6 +63,13 @@ import {
   LocalRecognizer,
   type FrameAssessment,
 } from "./lib/localRecognizer";
+import { validateMolecule } from "./lib/molecule";
+import {
+  LOADING_STAGES,
+  initialLoadingState,
+  updateLoadingStage,
+  type LoadingState,
+} from "./lib/loadingProgress";
 
 type ScannerPhase =
   | "idle"
@@ -61,6 +78,8 @@ type ScannerPhase =
   | "scanning"
   | "recognized"
   | "error";
+
+type ScannerMode = "scan" | "fortune";
 
 const SEARCH_INTERVAL_MS = 250;
 const TRACK_INTERVAL_MS = 180;
@@ -264,8 +283,111 @@ function LessonPanel({
   );
 }
 
+function HomeVisual() {
+  const stars = [
+    [22, 45],
+    [36, 24],
+    [51, 39],
+    [68, 22],
+    [78, 50],
+    [62, 69],
+    [38, 75],
+  ] as const;
+  const links = [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [2, 4],
+    [4, 5],
+    [5, 6],
+    [6, 0],
+  ] as const;
+
+  return (
+    <div className="home-visual" aria-hidden="true">
+      <span className="home-petal home-petal-a" />
+      <span className="home-petal home-petal-b" />
+      <span className="home-petal home-petal-c" />
+      <svg className="home-constellation" viewBox="0 0 100 100" focusable="false">
+        {links.map(([from, to]) => (
+          <line
+            key={`${from}-${to}`}
+            x1={stars[from][0]}
+            y1={stars[from][1]}
+            x2={stars[to][0]}
+            y2={stars[to][1]}
+          />
+        ))}
+        {stars.map(([x, y], index) => (
+          <circle key={`${x}-${y}`} cx={x} cy={y} r={index === 2 ? 4 : 2.6} />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function AminoAcidList({
+  selectedId,
+  onSelect,
+  onClose,
+}: {
+  selectedId: AminoAcidId | null;
+  onSelect: (id: AminoAcidId) => void;
+  onClose: () => void;
+}) {
+  const selected = selectedId ? AMINO_ACID_BY_ID[selectedId] : null;
+  return (
+    <section className="amino-list" aria-labelledby="amino-list-title">
+      <header className="amino-list-heading">
+        <div>
+          <p className="home-kicker">20このなかま</p>
+          <h2 id="amino-list-title">アミノ酸をみる</h2>
+        </div>
+        <button
+          className="icon-button amino-list-close"
+          type="button"
+          onClick={onClose}
+          aria-label="アミノ酸リストを閉じる"
+          title="閉じる"
+        >
+          <X aria-hidden="true" />
+        </button>
+      </header>
+      <div className="amino-list-grid">
+        {AMINO_ACIDS.map((acid) => (
+          <button
+            key={acid.id}
+            className={`amino-list-item${selectedId === acid.id ? " is-selected" : ""}`}
+            type="button"
+            onClick={() => onSelect(acid.id)}
+            style={{ "--acid-color": acid.theme } as React.CSSProperties}
+          >
+            <span className="amino-list-dot" aria-hidden="true" />
+            <span>{acid.nameJa}</span>
+            <small>{acid.code}</small>
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div className="amino-list-detail" aria-live="polite">
+          <strong>{selected.nameJa}</strong>
+          <span>{selected.shape}</span>
+          <button type="button" onClick={onClose}>とじる</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function AminoAcidScanner() {
+  const [loadingState, setLoadingState] = useState<LoadingState>(() =>
+    initialLoadingState(),
+  );
+  const [loadingDismissed, setLoadingDismissed] = useState(false);
+  const [showAminoList, setShowAminoList] = useState(false);
+  const [listSelectedId, setListSelectedId] = useState<AminoAcidId | null>(null);
   const [phase, setPhase] = useState<ScannerPhase>("idle");
+  const [scannerMode, setScannerMode] = useState<ScannerMode>("scan");
   const [qualityText, setQualityText] = useState(QUALITY_TEXT.ok);
   const [resultId, setResultId] = useState<AminoAcidId | null>(null);
   const [errorKind, setErrorKind] = useState<CameraErrorKind | null>(null);
@@ -278,6 +400,7 @@ export function AminoAcidScanner() {
   const [trackedQuad, setTrackedQuad] = useState<TrackedQuad | null>(null);
   const [anchorState, setAnchorState] =
     useState<AnchorState["state"]>("lost");
+  const phaseRef = useRef<ScannerPhase>("idle");
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const analysisCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -288,6 +411,16 @@ export function AminoAcidScanner() {
     new RecognitionConsensus<AminoAcidId>(3, 0.72, 0.008),
   );
   const scanTimerRef = useRef<number | null>(null);
+  const loopGenerationRef = useRef(0);
+  const scanGenerationRef = useRef(0);
+  const cameraStartGenerationRef = useRef(0);
+  const recognizerReadyRef = useRef(false);
+  const recognizerInitializingRef = useRef(false);
+  const uploadTokenRef = useRef(0);
+  const uploadPendingRef = useRef(false);
+  const activeAnalysisGenerationRef = useRef<number | null>(null);
+  const restartScanAfterPendingRef = useRef<number | null>(null);
+  const beginScanLoopRef = useRef<(() => void) | null>(null);
   const scanningRef = useRef(false);
   const trackedIdRef = useRef<AminoAcidId | null>(null);
   const panelExpandedRef = useRef(false);
@@ -298,13 +431,149 @@ export function AminoAcidScanner() {
   const lastIdentitySeenAtRef = useRef(0);
   const lastPoseSeenAtRef = useRef(0);
   const lastCloudAtRef = useRef(0);
+  const cloudRequestTokenRef = useRef(0);
   const uncertainSinceRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const result = resultId ? AMINO_ACID_BY_ID[resultId] : null;
+  const fortune = resultId ? FORTUNES[resultId] : null;
   const statusText = STATUS_TEXT[phase];
+  const coreLoadingReady = (["shell", "molecule", "camera"] as const).every(
+    (stageId) => {
+      const stageState = loadingState.stages[stageId];
+      return (
+        stageState.progress >= 1 &&
+        (stageState.status === "ready" || stageState.status === "failed")
+      );
+    },
+  );
+  const loadingVisible =
+    !loadingDismissed && !coreLoadingReady;
+
+  useEffect(() => {
+    if (coreLoadingReady) setLoadingDismissed(true);
+  }, [coreLoadingReady]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const updateStage = (
+      stageId: (typeof LOADING_STAGES)[number]["id"],
+      update: Parameters<typeof updateLoadingStage>[2],
+    ) => {
+      if (cancelled) return;
+      setLoadingState((current) => updateLoadingStage(current, stageId, update));
+    };
+
+    const preloadReferenceArt = async () => {
+      updateStage("art", { progress: 0, status: "loading" });
+      let completed = 0;
+      let failed = 0;
+      await Promise.all(
+        AMINO_ACIDS.map(
+          (acid) =>
+            new Promise<void>((resolve) => {
+              const image = new Image();
+              image.decoding = "async";
+              const finish = (didFail: boolean) => {
+                completed += 1;
+                if (didFail) failed += 1;
+                updateStage("art", {
+                  progress: completed / AMINO_ACIDS.length,
+                  status: "loading",
+                });
+                resolve();
+              };
+              image.onload = () => finish(false);
+              image.onerror = () => finish(true);
+              image.src = acid.referencePath;
+            }),
+        ),
+      );
+      if (failed) {
+        updateStage("art", {
+          progress: 1,
+          status: "failed",
+          message: `${failed}この図案をあとで読み込みます`,
+        });
+      } else {
+        updateStage("art", { progress: 1, status: "ready" });
+      }
+    };
+
+    const begin = () => {
+      if (cancelled) return;
+      updateStage("shell", { progress: 1, status: "ready" });
+      const moleculeReady = AMINO_ACID_IDS.every((id) => {
+        const molecule = MOLECULES[id];
+        return Boolean(
+          molecule &&
+            molecule.atoms.length > 0 &&
+            molecule.bonds.length > 0 &&
+            validateMolecule(molecule).length === 0,
+        );
+      });
+      updateStage(
+        "molecule",
+        moleculeReady
+          ? { progress: 1, status: "ready" }
+          : {
+              progress: 1,
+              status: "failed",
+              message: "分子の図をあとで読み込みます",
+            },
+      );
+      const cameraReady =
+        typeof navigator !== "undefined" &&
+        Boolean(navigator.mediaDevices?.getUserMedia);
+      updateStage(
+        "camera",
+        cameraReady
+          ? { progress: 1, status: "ready" }
+          : {
+              progress: 1,
+              status: "failed",
+              message: "カメラが使えないときは写真で調べられます",
+            },
+      );
+      void preloadReferenceArt();
+    };
+
+    const frame = window.requestAnimationFrame(begin);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  const getRecognizer = useCallback(() => {
+    if (!recognizerRef.current) {
+      recognizerRef.current = new LocalRecognizer();
+    }
+    return recognizerRef.current;
+  }, []);
+
+  const isCurrentGeneration = useCallback(
+    (generation: number) => scanGenerationRef.current === generation,
+    [],
+  );
+
+  const isCurrentCameraStart = useCallback(
+    (generation: number) => cameraStartGenerationRef.current === generation,
+    [],
+  );
+
+  const isCurrentUpload = useCallback(
+    (token: number, generation: number) =>
+      uploadTokenRef.current === token && isCurrentGeneration(generation),
+    [isCurrentGeneration],
+  );
 
   const stopScanTimer = useCallback(() => {
+    loopGenerationRef.current += 1;
     if (scanTimerRef.current !== null) {
       window.clearTimeout(scanTimerRef.current);
       scanTimerRef.current = null;
@@ -312,8 +581,15 @@ export function AminoAcidScanner() {
   }, []);
 
   const stopCamera = useCallback(() => {
+    scanGenerationRef.current += 1;
+    cameraStartGenerationRef.current += 1;
+    cloudRequestTokenRef.current += 1;
+    recognizerReadyRef.current = false;
+    recognizerInitializingRef.current = false;
+    uploadTokenRef.current += 1;
+    uploadPendingRef.current = false;
+    restartScanAfterPendingRef.current = null;
     stopScanTimer();
-    scanningRef.current = false;
     stopMediaStream(streamRef.current);
     streamRef.current = null;
     trackRef.current = null;
@@ -325,8 +601,17 @@ export function AminoAcidScanner() {
     setTrackedQuad(null);
     setAnchorState("lost");
     setResultId(null);
+    setScannerMode("scan");
     setPanelExpanded(false);
     setCameraActive(false);
+    setCloudNotice(false);
+    setUploadedPreview(null);
+    setShowAminoList(false);
+    setListSelectedId(null);
+    setErrorKind(null);
+    consensusRef.current.reset(true);
+    uncertainSinceRef.current = 0;
+    lastCloudAtRef.current = 0;
     if (videoRef.current) videoRef.current.srcObject = null;
     setTorchAvailable(false);
     setTorchEnabled(false);
@@ -338,7 +623,12 @@ export function AminoAcidScanner() {
       id: AminoAcidId,
       source: "local" | "cloud",
       anchor: TrackedQuad | null = null,
+      generation?: number,
     ) => {
+      if (generation !== undefined && !isCurrentGeneration(generation)) {
+        return;
+      }
+      cloudRequestTokenRef.current += 1;
       const seenAt = Date.now();
       trackedIdRef.current = id;
       lastIdentitySeenAtRef.current = seenAt;
@@ -353,14 +643,26 @@ export function AminoAcidScanner() {
       }
       if (source === "cloud") setCloudNotice(true);
     },
-    [],
+    [isCurrentGeneration],
   );
 
   const requestCloudFallback = useCallback(
-    async (canvas: HTMLCanvasElement, manual = false) => {
+    async (
+      canvas: HTMLCanvasElement,
+      manual = false,
+      generation = scanGenerationRef.current,
+      uploadToken?: number,
+    ) => {
+      if (
+        !isCurrentGeneration(generation) ||
+        (uploadToken !== undefined && uploadTokenRef.current !== uploadToken)
+      ) {
+        return;
+      }
       const now = Date.now();
       if (!manual && now - lastCloudAtRef.current < 5000) return;
       lastCloudAtRef.current = now;
+      const requestToken = ++cloudRequestTokenRef.current;
       try {
         const image = canvas.toDataURL("image/jpeg", 0.72);
         const response = await fetch("api/recognize", {
@@ -368,23 +670,39 @@ export function AminoAcidScanner() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ image }),
         });
+        if (
+          !isCurrentGeneration(generation) ||
+          cloudRequestTokenRef.current !== requestToken ||
+          (uploadToken !== undefined && uploadTokenRef.current !== uploadToken)
+        ) {
+          return;
+        }
         if (!response.ok) return;
         const payload = (await response.json()) as {
           id?: AminoAcidId;
           confidence?: number;
         };
+        if (
+          !isCurrentGeneration(generation) ||
+          cloudRequestTokenRef.current !== requestToken ||
+          (uploadToken !== undefined && uploadTokenRef.current !== uploadToken)
+        ) {
+          return;
+        }
         if (payload.id && (payload.confidence ?? 0) >= 0.68) {
-          applyStableResult(payload.id, "cloud");
+          applyStableResult(payload.id, "cloud", null, generation);
         }
       } catch {
         // Local scanning continues when the optional fallback is unavailable.
       }
     },
-    [applyStableResult],
+    [applyStableResult, isCurrentGeneration],
   );
 
   const analyzeCurrentFrame = useCallback(async () => {
     if (
+      !recognizerReadyRef.current ||
+      uploadPendingRef.current ||
       scanningRef.current ||
       document.hidden ||
       panelExpandedRef.current ||
@@ -393,6 +711,7 @@ export function AminoAcidScanner() {
     ) {
       return;
     }
+    const generation = scanGenerationRef.current;
     const trackedId = trackedIdRef.current;
     const canvas =
       analysisCanvasRef.current ??
@@ -407,15 +726,16 @@ export function AminoAcidScanner() {
     ) {
       return;
     }
+    if (!isCurrentGeneration(generation)) return;
     scanningRef.current = true;
+    activeAnalysisGenerationRef.current = generation;
     try {
-      const recognizer =
-        recognizerRef.current ??
-        (recognizerRef.current = new LocalRecognizer());
+      const recognizer = getRecognizer();
 
       if (trackedId) {
         const startedAt = performance.now();
         const tracking = await recognizer.track(canvas, trackedId);
+        if (!isCurrentGeneration(generation)) return;
         const durations = analysisDurationRef.current;
         durations.push(performance.now() - startedAt);
         analysisDurationRef.current = durations.slice(-8);
@@ -455,6 +775,7 @@ export function AminoAcidScanner() {
       }
 
       const assessment = await recognizer.recognize(canvas);
+      if (!isCurrentGeneration(generation)) return;
       setQualityText(QUALITY_TEXT[assessment.quality]);
       const candidate =
         assessment.result && assessment.result.inliers >= 6
@@ -467,27 +788,65 @@ export function AminoAcidScanner() {
           assessment.result?.id === stable.id
             ? assessment.result.anchor
             : null;
-        applyStableResult(stable.id, "local", anchor);
+        applyStableResult(stable.id, "local", anchor, generation);
       } else if (assessment.quality === "ok") {
         if (!uncertainSinceRef.current) uncertainSinceRef.current = Date.now();
         if (Date.now() - uncertainSinceRef.current > 2000) {
-          void requestCloudFallback(canvas);
+          void requestCloudFallback(canvas, false, generation);
         }
       } else {
         uncertainSinceRef.current = 0;
       }
     } catch {
-      setQualityText("形をじゅんびできません。写真から試してみよう");
+      if (isCurrentGeneration(generation)) {
+        setQualityText("形をじゅんびできません。写真から試してみよう");
+      }
     } finally {
+      if (activeAnalysisGenerationRef.current !== generation) return;
+      activeAnalysisGenerationRef.current = null;
       scanningRef.current = false;
+      const restartGeneration = restartScanAfterPendingRef.current;
+      if (
+        restartGeneration !== null &&
+        isCurrentGeneration(restartGeneration) &&
+        recognizerReadyRef.current &&
+        phaseRef.current !== "indexing" &&
+        streamRef.current &&
+        !panelExpandedRef.current
+      ) {
+        restartScanAfterPendingRef.current = null;
+        beginScanLoopRef.current?.();
+      }
     }
-  }, [applyStableResult, requestCloudFallback]);
+  }, [
+    applyStableResult,
+    getRecognizer,
+    isCurrentGeneration,
+    requestCloudFallback,
+  ]);
 
   const beginScanLoop = useCallback(() => {
+    if (!recognizerReadyRef.current) return;
+    if (uploadPendingRef.current) return;
     stopScanTimer();
+    loopGenerationRef.current += 1;
+    const loopGeneration = loopGenerationRef.current;
+    const generation = scanGenerationRef.current;
     const tick = async () => {
+      if (
+        loopGenerationRef.current !== loopGeneration ||
+        scanGenerationRef.current !== generation
+      ) {
+        return;
+      }
       const startedAt = performance.now();
       await analyzeCurrentFrame();
+      if (
+        loopGenerationRef.current !== loopGeneration ||
+        !isCurrentGeneration(generation)
+      ) {
+        return;
+      }
       const analysisElapsed = performance.now() - startedAt;
       if (
         !streamRef.current ||
@@ -511,10 +870,47 @@ export function AminoAcidScanner() {
       scanTimerRef.current = window.setTimeout(tick, delay);
     };
     void tick();
-  }, [analyzeCurrentFrame, stopScanTimer]);
+  }, [analyzeCurrentFrame, isCurrentGeneration, stopScanTimer]);
 
-  const startCamera = useCallback(async () => {
+  // Stale analysis can restart the latest loop without creating a second loop.
+  useEffect(() => {
+    beginScanLoopRef.current = beginScanLoop;
+    return () => {
+      if (beginScanLoopRef.current === beginScanLoop) {
+        beginScanLoopRef.current = null;
+      }
+    };
+  }, [beginScanLoop]);
+
+  const queueOrBeginScanLoop = useCallback(() => {
+    if (scanningRef.current) {
+      restartScanAfterPendingRef.current = scanGenerationRef.current;
+      return;
+    }
+    restartScanAfterPendingRef.current = null;
+    beginScanLoop();
+  }, [beginScanLoop]);
+
+  const startCamera = useCallback(async (mode: ScannerMode = "scan") => {
+    cameraStartGenerationRef.current += 1;
+    const cameraGeneration = cameraStartGenerationRef.current;
+    scanGenerationRef.current += 1;
+    cloudRequestTokenRef.current += 1;
+    recognizerReadyRef.current = false;
+    recognizerInitializingRef.current = false;
+    uploadTokenRef.current += 1;
+    uploadPendingRef.current = false;
+    restartScanAfterPendingRef.current = null;
+    stopScanTimer();
+    setScannerMode(mode);
     stopMediaStream(streamRef.current);
+    streamRef.current = null;
+    trackRef.current = null;
+    // Reserve recognizer ownership while the camera is coming up as well as
+    // while its model is initializing. An upload selected during this window
+    // waits instead of starting a second recognizer operation.
+    recognizerInitializingRef.current = true;
+    setCameraActive(false);
     trackedIdRef.current = null;
     lastIdentitySeenAtRef.current = 0;
     lastPoseSeenAtRef.current = 0;
@@ -527,9 +923,15 @@ export function AminoAcidScanner() {
     setCloudNotice(false);
     setUploadedPreview(null);
     consensusRef.current.reset(true);
+    lastCloudAtRef.current = 0;
     setPhase("requesting");
     const camera = await startRearCamera();
+    if (!isCurrentCameraStart(cameraGeneration)) {
+      if (camera.ok) stopMediaStream(camera.stream);
+      return;
+    }
     if (!camera.ok) {
+      recognizerInitializingRef.current = false;
       setErrorKind(camera.kind);
       setPhase("error");
       return;
@@ -537,26 +939,93 @@ export function AminoAcidScanner() {
     streamRef.current = camera.stream;
     trackRef.current = camera.track;
     setCameraActive(true);
+    const discardCamera = () => {
+      stopMediaStream(camera.stream);
+      if (streamRef.current !== camera.stream) return;
+      streamRef.current = null;
+      trackRef.current = null;
+      setCameraActive(false);
+      if (videoRef.current?.srcObject === camera.stream) {
+        videoRef.current.srcObject = null;
+      }
+    };
     if (videoRef.current) {
       videoRef.current.srcObject = camera.stream;
-      await videoRef.current.play();
+      try {
+        await videoRef.current.play();
+      } catch {
+        if (
+          !isCurrentCameraStart(cameraGeneration) ||
+          streamRef.current !== camera.stream
+        ) {
+          discardCamera();
+          return;
+        }
+        discardCamera();
+        recognizerInitializingRef.current = false;
+        setErrorKind("unknown");
+        setQualityText("カメラを再生できませんでした。もう一度ためしてみよう");
+        setPhase("error");
+        return;
+      }
+      if (
+        !isCurrentCameraStart(cameraGeneration) ||
+        streamRef.current !== camera.stream
+      ) {
+        discardCamera();
+        return;
+      }
     }
     setTorchAvailable(trackSupportsTorch(camera.track));
     setPhase("indexing");
+    recognizerInitializingRef.current = true;
     try {
-      const recognizer =
-        recognizerRef.current ??
-        (recognizerRef.current = new LocalRecognizer());
+      const recognizer = getRecognizer();
       await recognizer.initialize();
+      if (
+        !isCurrentCameraStart(cameraGeneration) ||
+        streamRef.current !== camera.stream
+      ) {
+        discardCamera();
+        return;
+      }
+      recognizerInitializingRef.current = false;
+      recognizerReadyRef.current = true;
+      if (uploadPendingRef.current) {
+        setPhase("indexing");
+        return;
+      }
       setPhase("scanning");
-      beginScanLoop();
+      queueOrBeginScanLoop();
     } catch {
-      setPhase("scanning");
-      setQualityText("形をじゅんびできません。写真から試してみよう");
+      if (
+        isCurrentCameraStart(cameraGeneration) &&
+        streamRef.current === camera.stream
+      ) {
+        recognizerReadyRef.current = false;
+        recognizerInitializingRef.current = false;
+        discardCamera();
+        setErrorKind(null);
+        setQualityText("分子の準備に失敗しました。もう一度ためしてみよう");
+        setPhase("error");
+      }
     }
-  }, [beginScanLoop]);
+  }, [
+    getRecognizer,
+    isCurrentCameraStart,
+    queueOrBeginScanLoop,
+    stopScanTimer,
+  ]);
 
   const rescan = useCallback(() => {
+    stopScanTimer();
+    scanGenerationRef.current += 1;
+    cloudRequestTokenRef.current += 1;
+    recognizerInitializingRef.current = false;
+    uploadTokenRef.current += 1;
+    uploadPendingRef.current = false;
+    restartScanAfterPendingRef.current = null;
+    panelExpandedRef.current = false;
     trackedIdRef.current = null;
     lastIdentitySeenAtRef.current = 0;
     lastPoseSeenAtRef.current = 0;
@@ -569,40 +1038,120 @@ export function AminoAcidScanner() {
     setCloudNotice(false);
     setPanelExpanded(false);
     setQualityText(QUALITY_TEXT.ok);
-    setPhase(streamRef.current ? "scanning" : "idle");
-  }, []);
+    uncertainSinceRef.current = 0;
+    lastCloudAtRef.current = 0;
+    if (streamRef.current) {
+      if (phase === "indexing" && !recognizerReadyRef.current) {
+        setPhase("indexing");
+      } else {
+        setPhase("scanning");
+        queueOrBeginScanLoop();
+      }
+    } else {
+      setPhase("idle");
+    }
+  }, [phase, queueOrBeginScanLoop, stopScanTimer]);
 
   const toggleTorch = useCallback(async () => {
-    if (!trackRef.current) return;
+    const generation = scanGenerationRef.current;
+    const track = trackRef.current;
+    if (!track) return;
     const next = !torchEnabled;
     try {
-      await setTrackTorch(trackRef.current, next);
+      await setTrackTorch(track, next);
+      if (!isCurrentGeneration(generation) || trackRef.current !== track) {
+        return;
+      }
       setTorchEnabled(next);
     } catch {
+      if (!isCurrentGeneration(generation) || trackRef.current !== track) {
+        return;
+      }
       setTorchAvailable(false);
     }
-  }, [torchEnabled]);
+  }, [isCurrentGeneration, torchEnabled]);
 
   const inspectUploadedFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       event.target.value = "";
       if (!file) return;
+
+      const uploadToken = ++uploadTokenRef.current;
+      const generation = ++scanGenerationRef.current;
+      cloudRequestTokenRef.current += 1;
+      uploadPendingRef.current = true;
+      restartScanAfterPendingRef.current = null;
+      panelExpandedRef.current = false;
+      stopScanTimer();
+      trackedIdRef.current = null;
+      lastIdentitySeenAtRef.current = 0;
+      lastPoseSeenAtRef.current = 0;
+      anchorSmootherRef.current.reset();
+      consensusRef.current.reset(true);
+      setResultId(null);
+      setTrackedQuad(null);
+      setAnchorState("lost");
+      setCloudNotice(false);
+      setPanelExpanded(false);
+      setPhase("indexing");
+
       const image = new Image();
       const objectUrl = URL.createObjectURL(file);
+      const isCurrent = () => isCurrentUpload(uploadToken, generation);
+      const resumeCamera = () => {
+        if (!isCurrent()) return;
+        uploadPendingRef.current = false;
+        if (!streamRef.current) {
+          setPhase("idle");
+        } else if (recognizerReadyRef.current) {
+          setPhase("scanning");
+          queueOrBeginScanLoop();
+        } else {
+          setPhase("indexing");
+        }
+      };
+      const waitForTurn = async () => {
+        while (scanningRef.current || recognizerInitializingRef.current) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 16);
+          });
+          if (!isCurrent()) return false;
+        }
+        return isCurrent();
+      };
+
       image.onload = async () => {
+        if (!isCurrent()) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
         const canvas =
           analysisCanvasRef.current ??
           (analysisCanvasRef.current = document.createElement("canvas"));
-        drawUploadedImage(image, canvas);
-        setUploadedPreview(canvas.toDataURL("image/jpeg", 0.82));
-        URL.revokeObjectURL(objectUrl);
-        setPhase("indexing");
         try {
-          const recognizer =
-            recognizerRef.current ??
-            (recognizerRef.current = new LocalRecognizer());
+          drawUploadedImage(image, canvas);
+          const preview = canvas.toDataURL("image/jpeg", 0.82);
+          if (!isCurrent()) {
+            URL.revokeObjectURL(objectUrl);
+            return;
+          }
+          setUploadedPreview(preview);
+        } catch {
+          URL.revokeObjectURL(objectUrl);
+          if (!isCurrent()) return;
+          setQualityText("この写真は開けませんでした");
+          resumeCamera();
+          return;
+        }
+        URL.revokeObjectURL(objectUrl);
+
+        if (!(await waitForTurn()) || !isCurrent()) return;
+        scanningRef.current = true;
+        try {
+          const recognizer = getRecognizer();
           const assessment = await recognizer.recognize(canvas);
+          if (!isCurrent()) return;
           const uploadResult = assessment.result;
           const confidentUpload =
             uploadResult !== null &&
@@ -610,55 +1159,102 @@ export function AminoAcidScanner() {
             (uploadResult.margin >= 0.045 ||
               (uploadResult.score >= 0.9 && uploadResult.margin >= 0.008));
           if (uploadResult && confidentUpload && uploadResult.inliers >= 6) {
+            uploadPendingRef.current = false;
             applyStableResult(
               uploadResult.id,
               "local",
               uploadResult.anchor,
+              generation,
             );
           } else {
-            setPhase(streamRef.current ? "scanning" : "idle");
             setQualityText("まだわかりません。面を正面からうつしてみよう");
-            await requestCloudFallback(canvas, true);
+            resumeCamera();
+            await requestCloudFallback(canvas, true, generation, uploadToken);
           }
         } catch {
-          setPhase(streamRef.current ? "scanning" : "idle");
-          await requestCloudFallback(canvas, true);
+          if (!isCurrent()) return;
+          resumeCamera();
+          await requestCloudFallback(canvas, true, generation, uploadToken);
+        } finally {
+          scanningRef.current = false;
+          const restartGeneration = restartScanAfterPendingRef.current;
+          if (
+            restartGeneration !== null &&
+            isCurrentGeneration(restartGeneration) &&
+            recognizerReadyRef.current &&
+            !uploadPendingRef.current &&
+            phaseRef.current !== "indexing" &&
+            streamRef.current &&
+            !panelExpandedRef.current
+          ) {
+            restartScanAfterPendingRef.current = null;
+            beginScanLoopRef.current?.();
+          }
         }
       };
       image.onerror = () => {
         URL.revokeObjectURL(objectUrl);
+        if (!isCurrent()) return;
         setQualityText("この写真は開けませんでした");
+        resumeCamera();
       };
       image.src = objectUrl;
     },
-    [applyStableResult, requestCloudFallback],
+    [
+      applyStableResult,
+      getRecognizer,
+      isCurrentGeneration,
+      isCurrentUpload,
+      queueOrBeginScanLoop,
+      requestCloudFallback,
+      stopScanTimer,
+    ],
   );
 
   const manualSnapshot = useCallback(() => {
+    const generation = scanGenerationRef.current;
     const video = videoRef.current;
     const stage = stageRef.current;
     const canvas =
       analysisCanvasRef.current ??
       (analysisCanvasRef.current = document.createElement("canvas"));
     if (video && stage && captureGuide(video, stage, canvas)) {
-      void requestCloudFallback(canvas, true);
+      void requestCloudFallback(canvas, true, generation);
+      if (!isCurrentGeneration(generation)) return;
       setQualityText("1まいの写真で、もう一度たしかめています");
     }
-  }, [requestCloudFallback]);
+  }, [isCurrentGeneration, requestCloudFallback]);
 
   useEffect(() => {
     panelExpandedRef.current = panelExpanded;
-    if (panelExpanded) {
+    if (
+      panelExpanded ||
+      phase === "indexing" ||
+      !recognizerReadyRef.current ||
+      uploadPendingRef.current
+    ) {
       stopScanTimer();
-    } else if (streamRef.current) {
+    } else if (
+      recognizerReadyRef.current &&
+      !uploadPendingRef.current &&
+      streamRef.current &&
+      (phase === "scanning" || phase === "recognized")
+    ) {
       beginScanLoop();
     }
-  }, [beginScanLoop, panelExpanded, stopScanTimer]);
+  }, [beginScanLoop, panelExpanded, phase, stopScanTimer]);
 
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) stopScanTimer();
-      else if (streamRef.current) beginScanLoop();
+      else if (
+        recognizerReadyRef.current &&
+        !uploadPendingRef.current &&
+        streamRef.current &&
+        (phaseRef.current === "scanning" || phaseRef.current === "recognized")
+      ) {
+        beginScanLoop();
+      }
     };
     const handlePageHide = () => stopCamera();
     document.addEventListener("visibilitychange", handleVisibility);
@@ -672,10 +1268,16 @@ export function AminoAcidScanner() {
   }, [beginScanLoop, stopCamera, stopScanTimer]);
 
   useEffect(() => {
-    const demo = new URLSearchParams(window.location.search).get("demo");
+    const params = new URLSearchParams(window.location.search);
+    const demo = params.get("demo");
+    const mode: ScannerMode =
+      params.get("mode") === "fortune" ? "fortune" : "scan";
     if (demo && demo in AMINO_ACID_BY_ID) {
+      const generation = scanGenerationRef.current;
       window.setTimeout(() => {
+        if (!isCurrentGeneration(generation)) return;
         const id = demo as AminoAcidId;
+        setScannerMode(mode);
         trackedIdRef.current = id;
         const seenAt = Date.now();
         lastIdentitySeenAtRef.current = seenAt;
@@ -687,7 +1289,7 @@ export function AminoAcidScanner() {
         setPhase("recognized");
       }, 0);
     }
-  }, []);
+  }, [isCurrentGeneration]);
 
   const stageClass = useMemo(
     () =>
@@ -698,8 +1300,18 @@ export function AminoAcidScanner() {
   );
 
   return (
-    <main className="scanner-app">
-      <section className={stageClass} ref={stageRef}>
+    <>
+      {loadingVisible && (
+        <LoadingScreen
+          state={loadingState}
+          onContinue={() => setLoadingDismissed(true)}
+        />
+      )}
+      <main
+        className={`scanner-app${loadingVisible ? " is-loading" : ""}`}
+        aria-hidden={loadingVisible ? true : undefined}
+      >
+        <section className={stageClass} ref={stageRef}>
         <video
           ref={videoRef}
           className="camera-feed"
@@ -714,13 +1326,18 @@ export function AminoAcidScanner() {
               style={{ backgroundImage: `url(${uploadedPreview})` }}
             />
           ) : (
-            <img
-              src="references/tryptophan.png"
-              alt=""
-            />
+            <HomeVisual />
           )}
         </div>
         <div className="camera-shade" aria-hidden="true" />
+
+        {phase === "idle" && !uploadedPreview && (
+          <section className="home-copy" aria-labelledby="home-title">
+            <p className="home-kicker">20この分子を見つけよう</p>
+            <h1 id="home-title">アミノずかん</h1>
+            <p>球の面をカメラに見せると、分子の形がわかるよ。</p>
+          </section>
+        )}
 
         <header className="scanner-header">
           <div className="brand">
@@ -740,6 +1357,8 @@ export function AminoAcidScanner() {
           )}
         </header>
 
+        {!loadingVisible && <LoadingProgressBanner state={loadingState} />}
+
         <div className="status-pill" role="status" aria-live="polite">
           <span className={`status-dot status-${phase}`} />
           {statusText}
@@ -753,7 +1372,9 @@ export function AminoAcidScanner() {
             <span className="corner bottom-right" />
             {phase === "scanning" && <span className="scan-sweep" />}
           </div>
-          {result && trackedQuad && (
+          {result &&
+            trackedQuad &&
+            (scannerMode === "scan" || panelExpanded) && (
             <AnchoredOverlay
               acid={result}
               molecule={MOLECULES[result.id]}
@@ -765,21 +1386,50 @@ export function AminoAcidScanner() {
           )}
         </div>
 
+        {result && fortune && scannerMode === "fortune" && !panelExpanded && (
+          <FortuneCard
+            acid={result}
+            fortune={fortune}
+            onOpenLesson={() => setPanelExpanded(true)}
+            onRetry={rescan}
+            onHome={stopCamera}
+          />
+        )}
+
+        {phase === "idle" && showAminoList && (
+          <AminoAcidList
+            selectedId={listSelectedId}
+            onSelect={setListSelectedId}
+            onClose={() => {
+              setShowAminoList(false);
+              setListSelectedId(null);
+            }}
+          />
+        )}
+
         <p className="quality-hint" aria-live="polite">
           {phase === "error" && errorKind
             ? CAMERA_ERROR_TEXT[errorKind]
             : qualityText}
         </p>
 
-        {phase === "idle" && (
+        {phase === "idle" && !showAminoList && (
           <div className="start-actions">
             <button
               className="primary-button"
               type="button"
-              onClick={startCamera}
+              onClick={() => void startCamera("scan")}
             >
               <Camera aria-hidden="true" />
-              カメラをはじめる
+              カメラでスキャンする
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void startCamera("fortune")}
+            >
+              <Sparkles aria-hidden="true" />
+              抽福をはじめる
             </button>
             <button
               className="secondary-button"
@@ -788,6 +1438,17 @@ export function AminoAcidScanner() {
             >
               <ImagePlus aria-hidden="true" />
               写真からしらべる
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                setListSelectedId(null);
+                setShowAminoList(true);
+              }}
+            >
+              <BookOpen aria-hidden="true" />
+              アミノ酸をみる
             </button>
             <p className="privacy-note">
               <ShieldCheck aria-hidden="true" />
@@ -801,10 +1462,18 @@ export function AminoAcidScanner() {
             <button
               className="primary-button"
               type="button"
-              onClick={startCamera}
+              onClick={() => void startCamera("scan")}
             >
-              <RefreshCw aria-hidden="true" />
-              もう一度ためす
+              <Camera aria-hidden="true" />
+              カメラでスキャンする
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void startCamera("fortune")}
+            >
+              <Sparkles aria-hidden="true" />
+              抽福をはじめる
             </button>
             <button
               className="secondary-button"
@@ -861,7 +1530,7 @@ export function AminoAcidScanner() {
           aria-label="調べる写真をえらぶ"
         />
 
-        {result && (
+        {result && (scannerMode === "scan" || panelExpanded) && (
           <LessonPanel
             acid={result}
             expanded={panelExpanded}
@@ -875,7 +1544,8 @@ export function AminoAcidScanner() {
             この1まいだけ、オンラインでも形をたしかめました。
           </p>
         )}
-      </section>
-    </main>
+        </section>
+      </main>
+    </>
   );
 }

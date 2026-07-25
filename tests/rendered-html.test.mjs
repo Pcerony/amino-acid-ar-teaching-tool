@@ -24,8 +24,12 @@ test("server-renders the Japanese scanner shell", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   assert.match(html, /lang="ja"/);
   assert.match(html, /<title>アミノずかんカメラ<\/title>/);
-  assert.match(html, /カメラをはじめる/);
+  assert.match(html, /カメラでスキャンする/);
+  assert.match(html, /抽福をはじめる/);
   assert.match(html, /写真からしらべる/);
+  assert.match(html, /アミノ酸をみる/);
+  assert.match(html, /分子を見つける/);
+  assert.match(html, /ページを準備中/);
   assert.match(html, /カメラの映像は、ふだん端末の中だけで調べます/);
   assert.match(html, /aria-label="調べる写真をえらぶ"/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);

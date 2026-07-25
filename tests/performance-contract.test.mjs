@@ -42,3 +42,60 @@ test("scanner pauses expensive work while the lesson is expanded or the page is 
   assert.match(source, /panelExpanded/);
   assert.match(source, /stopScanTimer/);
 });
+
+test("first paint stays light and does not load camera or 3D dependencies", async () => {
+  const loadingSource = await readFile(
+    new URL("../app/components/LoadingScreen.tsx", import.meta.url),
+    "utf8",
+  );
+  const scannerSource = await readFile(
+    new URL("../app/AminoAcidScanner.tsx", import.meta.url),
+    "utf8",
+  );
+  const pagesSource = await readFile(
+    new URL("../github-pages/index.html", import.meta.url),
+    "utf8",
+  );
+  const mainSource = await readFile(
+    new URL("../github-pages/main.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(loadingSource, /(?:three|@techstark\/opencv-js|LocalRecognizer)/i);
+  assert.equal((scannerSource.match(/new LocalRecognizer\(\)/g) ?? []).length, 1);
+  assert.match(scannerSource, /coreLoadingReady/);
+  assert.match(scannerSource, /LoadingProgressBanner/);
+  assert.match(scannerSource, /loadingState\.stages\.art\.status/);
+  assert.doesNotMatch(pagesSource, /<script[^>]+(?:vendor\/opencv|opencv\.js)/i);
+  assert.match(pagesSource, /id="bootstrap-shell"[\s\S]*role="status"/);
+  assert.match(pagesSource, /id="bootstrap-progress"[\s\S]*<\/progress>/);
+  assert.doesNotMatch(pagesSource, /(?:three|@techstark\/opencv-js)/i);
+  assert.match(mainSource, /getElementById\("bootstrap-shell"\)\?\.remove\(\)/);
+});
+
+test("loading checks every known molecule and preloads only the twenty reference images", async () => {
+  const source = await readFile(
+    new URL("../app/AminoAcidScanner.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /AMINO_ACID_IDS\.every\(\(id\)/);
+  assert.match(source, /validateMolecule\(molecule\)/);
+  assert.doesNotMatch(source, /Object\.keys\(MOLECULES\)\.length/);
+
+  const preloadStart = source.indexOf("const preloadReferenceArt");
+  const preloadEnd = source.indexOf("const begin", preloadStart);
+  assert.ok(preloadStart >= 0 && preloadEnd > preloadStart);
+  const preloadSource = source.slice(preloadStart, preloadEnd);
+  assert.match(preloadSource, /AMINO_ACIDS\.map/);
+  assert.match(preloadSource, /image\.src\s*=\s*acid\.referencePath/);
+  assert.doesNotMatch(preloadSource, /getUserMedia/);
+  assert.doesNotMatch(preloadSource, /setInterval|setTimeout/);
+});
+
+test("README documents visible weak-network loading and the two child-friendly modes", async () => {
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+  assert.match(readme, /ページを準備中|加载进度/);
+  assert.match(readme, /抽福/);
+  assert.match(readme, /固定/);
+  assert.match(readme, /弱网|ネットワーク|network/i);
+});

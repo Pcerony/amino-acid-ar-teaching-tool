@@ -10,10 +10,39 @@
     <meta property="og:image" content="og.png" />
     <link rel="icon" href="favicon.svg" />
     <title>アミノずかんカメラ</title>
-    <script src="vendor/opencv.js"></script>
+    <style>
+      :root { color-scheme: light; }
+      html, body { min-height: 100%; margin: 0; }
+      body { background: #e9f6f0; color: #17352b; font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif; }
+      #bootstrap-shell { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #e9f6f0; }
+      .bootstrap-card { width: min(100%, 390px); padding: 30px 24px 24px; border: 1px solid #c5e4d5; border-radius: 8px; background: #fffdf8; box-shadow: 0 16px 42px rgba(46, 106, 80, .14); }
+      .bootstrap-kicker { margin: 0 0 8px; color: #2e9a78; font-size: 13px; font-weight: 800; letter-spacing: .08em; }
+      .bootstrap-card h1 { margin: 0; font-size: clamp(25px, 7vw, 32px); line-height: 1.22; }
+      #bootstrap-status { min-height: 1.5em; margin: 17px 0 10px; color: #567269; font-size: 13px; font-weight: 700; }
+      #bootstrap-progress { width: calc(100% - 52px); height: 11px; vertical-align: middle; accent-color: #3fb58a; }
+      #bootstrap-percent { display: inline-block; width: 42px; color: #216c52; font-size: 13px; text-align: right; vertical-align: middle; }
+      .bootstrap-note { margin: 18px 0 0; color: #6c8178; font-size: 12px; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Keep the first paint useful while the React bundle is still downloading. -->
+      <div
+        id="bootstrap-shell"
+        role="status"
+        aria-live="polite"
+        aria-label="ページの読み込み"
+      >
+        <div class="bootstrap-card">
+          <p class="bootstrap-kicker">アミノずかん</p>
+          <h1>分子を見つける<br />じゅんび中</h1>
+          <p id="bootstrap-status">ページを準備中</p>
+          <progress id="bootstrap-progress" max="100" aria-label="読み込み進度"></progress>
+          <span id="bootstrap-percent">準備中</span>
+          <p class="bootstrap-note">画面を閉じずに、少しまってね。</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>

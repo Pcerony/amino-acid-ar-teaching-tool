@@ -1597,17 +1597,267 @@ rt {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
 
-  .ar-anchor-layer {
-    transition: none;
+/* --- Fortune Media & 3D Molecule Styles --- */
+.fortune-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.fortune-media-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px solid #dce6df;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.fortune-media-label {
+  margin-bottom: 6px;
+  color: color-mix(in srgb, var(--acid-color, #2e9a78), #132219 65%);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.fortune-acid-img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.fortune-acid-name {
+  margin-top: 4px;
+  color: #23342b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fortune-molecule-3d {
+  width: 100%;
+  height: 90px;
+  position: relative;
+}
+
+/* --- Amino Acid List Detail Media Styles --- */
+.amino-list-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #dce6df;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.amino-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.amino-detail-header h3 {
+  margin: 0 0 4px;
+  color: #17352b;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.amino-detail-shape {
+  margin: 0 0 4px;
+  color: #2e9a78;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.amino-detail-role {
+  margin: 0;
+  color: #567269;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.amino-detail-close {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.amino-detail-media {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.amino-detail-media-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #e2ebe5;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+
+.amino-detail-media-title {
+  margin-bottom: 6px;
+  color: #3b5c4f;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.amino-detail-img {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+}
+
+.amino-detail-3d {
+  width: 100%;
+  height: 95px;
+  position: relative;
+}
+
+/* --- Japanese Fortune Guide Modal (花てまりおみくじあそびかた) --- */
+.fortune-guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(17, 24, 22, 0.65);
+  backdrop-filter: blur(4px);
+  animation: guide-fade-in 200ms ease-out;
+}
+
+.fortune-guide-card {
+  width: min(100%, 380px);
+  padding: 24px 20px 20px;
+  border: 2px solid #e1d2b8;
+  border-radius: 16px;
+  background: #fffdf8;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.fortune-guide-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.fortune-guide-kicker {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #f3e5d0;
+  color: #8c5d2b;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.fortune-guide-header h2 {
+  margin: 0;
+  color: #3d2b1f;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.guide-close {
+  border-color: #e5d8c3;
+  background: #f8f1e5;
+  color: #6b5545;
+}
+
+.fortune-guide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.guide-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #f0e3d0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.step-badge {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #d94b4b;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.step-content h3 {
+  margin: 0 0 4px;
+  color: #2b1e16;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.step-content p {
+  margin: 0;
+  color: #665345;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fortune-guide-footer {
+  display: flex;
+}
+
+.guide-start {
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #d94b4b 0%, #b83232 100%);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 14px rgba(217, 75, 75, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@keyframes guide-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
+

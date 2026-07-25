@@ -2,6 +2,8 @@
 
 import type { AminoAcid } from "../data/aminoAcids";
 import type { FortuneEntry } from "../data/fortunes";
+import { MOLECULES } from "../data/molecules";
+import { MoleculeViewer } from "./MoleculeViewer";
 
 type FortuneCardProps = {
   acid: AminoAcid;
@@ -11,8 +13,7 @@ type FortuneCardProps = {
   onHome: () => void;
 };
 
-/** A compact, deterministic result card. The constellation is only SVG so it
- * remains cheap to render while the camera and molecule viewer stay idle. */
+/** A compact, deterministic result card with amino acid image and 3D molecule model. */
 export function FortuneCard({
   acid,
   fortune,
@@ -24,17 +25,18 @@ export function FortuneCard({
     /^学習用のイメージ[：:]\s*/,
     "",
   );
+  const molecule = MOLECULES[acid.id];
 
   return (
     <section
       className="fortune-card"
       style={{ "--acid-color": acid.theme } as React.CSSProperties}
-      aria-label={`${acid.nameJa}の抽福結果`}
+      aria-label={`${acid.nameJa}の花てまりおみくじ結果`}
     >
       <div className="fortune-card-heading">
         <div>
           <span className="fortune-kicker">
-            分子星座 · {fortune.theme}
+            花てまりおみくじ · {fortune.theme}
           </span>
           <h2>{fortune.constellationName}</h2>
           <p className="fortune-title">{fortune.constellationTitle}</p>
@@ -70,6 +72,27 @@ export function FortuneCard({
             />
           ))}
         </svg>
+      </div>
+
+      {/* Added Amino Acid Reference Image and 3D Molecule Model */}
+      <div className="fortune-media-grid">
+        <div className="fortune-media-box">
+          <span className="fortune-media-label">であえたアミノ酸</span>
+          <img
+            src={acid.referencePath}
+            alt={acid.nameJa}
+            className="fortune-acid-img"
+          />
+          <span className="fortune-acid-name">{acid.nameJa} ({acid.code})</span>
+        </div>
+        {molecule && (
+          <div className="fortune-media-box">
+            <span className="fortune-media-label">3D 分子モデル</span>
+            <div className="fortune-molecule-3d">
+              <MoleculeViewer molecule={molecule} theme={acid.theme} />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="fortune-copy">
@@ -116,7 +139,7 @@ export function FortuneCard({
           分子をくわしく見る
         </button>
         <button type="button" className="fortune-secondary" onClick={onRetry}>
-          もう一度抽福
+          もう一度おみくじ
         </button>
         <button type="button" className="fortune-secondary" onClick={onHome}>
           ホームへ

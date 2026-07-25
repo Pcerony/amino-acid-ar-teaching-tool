@@ -40,6 +40,7 @@ import { MOLECULES } from "./data/molecules";
 import { FORTUNES } from "./data/fortunes";
 import { AnchoredOverlay } from "./components/AnchoredOverlay";
 import { FortuneCard } from "./components/FortuneCard";
+import { MoleculeViewer } from "./components/MoleculeViewer";
 import {
   LoadingProgressBanner,
   LoadingScreen,
@@ -326,6 +327,70 @@ function HomeVisual() {
   );
 }
 
+function FortuneGuideModal({
+  onStart,
+  onClose,
+}: {
+  onStart: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fortune-guide-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="guide-title"
+    >
+      <div className="fortune-guide-card">
+        <header className="fortune-guide-header">
+          <div>
+            <span className="fortune-guide-kicker">あそびかた</span>
+            <h2 id="guide-title">花てまりおみくじ</h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button guide-close"
+            onClick={onClose}
+            aria-label="閉じる"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </header>
+        <div className="fortune-guide-body">
+          <div className="guide-step">
+            <span className="step-badge">1</span>
+            <div className="step-content">
+              <h3>花てまりを ころがそう！</h3>
+              <p>
+                花てまり（サイコロ）を 床や 机の上に やさしく コロコロ転がしてね。
+              </p>
+            </div>
+          </div>
+          <div className="guide-step">
+            <span className="step-badge">2</span>
+            <div className="step-content">
+              <h3>上になった形を カメラでうつそう！</h3>
+              <p>
+                ピタッと 止まったら、いちばん上を 向いている アミノ酸の形を カメラで パシャッ！
+              </p>
+            </div>
+          </div>
+        </div>
+        <footer className="fortune-guide-footer">
+          <button
+            type="button"
+            className="primary-button guide-start"
+            onClick={onStart}
+          >
+            <Camera aria-hidden="true" />
+            カメラをひらく
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function AminoAcidList({
   selectedId,
   onSelect,
@@ -336,6 +401,8 @@ function AminoAcidList({
   onClose: () => void;
 }) {
   const selected = selectedId ? AMINO_ACID_BY_ID[selectedId] : null;
+  const molecule = selected ? MOLECULES[selected.id] : null;
+
   return (
     <section className="amino-list" aria-labelledby="amino-list-title">
       <header className="amino-list-heading">
@@ -370,9 +437,38 @@ function AminoAcidList({
       </div>
       {selected && (
         <div className="amino-list-detail" aria-live="polite">
-          <strong>{selected.nameJa}</strong>
-          <span>{selected.shape}</span>
-          <button type="button" onClick={onClose}>とじる</button>
+          <div className="amino-detail-header">
+            <div>
+              <h3>{selected.nameJa} <small>({selected.code})</small></h3>
+              <p className="amino-detail-shape">{selected.shape}</p>
+              <p className="amino-detail-role">{selected.role}</p>
+            </div>
+            <button
+              className="secondary-button amino-detail-close"
+              type="button"
+              onClick={() => onSelect(selected.id)}
+            >
+              とじる
+            </button>
+          </div>
+          <div className="amino-detail-media">
+            <div className="amino-detail-media-card">
+              <span className="amino-detail-media-title">教具カード</span>
+              <img
+                src={selected.referencePath}
+                alt={selected.nameJa}
+                className="amino-detail-img"
+              />
+            </div>
+            {molecule && (
+              <div className="amino-detail-media-card">
+                <span className="amino-detail-media-title">3D 分子モデル</span>
+                <div className="amino-detail-3d">
+                  <MoleculeViewer molecule={molecule} theme={selected.theme} />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </section>
@@ -395,6 +491,7 @@ export function AminoAcidScanner() {
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [showFortuneGuide, setShowFortuneGuide] = useState(false);
   const [cloudNotice, setCloudNotice] = useState(false);
   const [uploadedPreview, setUploadedPreview] = useState<string | null>(null);
   const [trackedQuad, setTrackedQuad] = useState<TrackedQuad | null>(null);
@@ -1426,18 +1523,10 @@ export function AminoAcidScanner() {
             <button
               className="secondary-button"
               type="button"
-              onClick={() => void startCamera("fortune")}
+              onClick={() => setShowFortuneGuide(true)}
             >
               <Sparkles aria-hidden="true" />
-              抽福をはじめる
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlus aria-hidden="true" />
-              写真からしらべる
+              花てまりおみくじ
             </button>
             <button
               className="secondary-button"
@@ -1470,18 +1559,10 @@ export function AminoAcidScanner() {
             <button
               className="secondary-button"
               type="button"
-              onClick={() => void startCamera("fortune")}
+              onClick={() => setShowFortuneGuide(true)}
             >
               <Sparkles aria-hidden="true" />
-              抽福をはじめる
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlus aria-hidden="true" />
-              写真からしらべる
+              花てまりおみくじ
             </button>
           </div>
         )}
@@ -1543,6 +1624,16 @@ export function AminoAcidScanner() {
           <p className="cloud-notice">
             この1まいだけ、オンラインでも形をたしかめました。
           </p>
+        )}
+
+        {showFortuneGuide && (
+          <FortuneGuideModal
+            onStart={() => {
+              setShowFortuneGuide(false);
+              void startCamera("fortune");
+            }}
+            onClose={() => setShowFortuneGuide(false)}
+          />
         )}
         </section>
       </main>

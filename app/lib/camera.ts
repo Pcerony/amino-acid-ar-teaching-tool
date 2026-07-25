@@ -52,11 +52,16 @@ export function stopMediaStream(stream: MediaStream | null | undefined) {
 }
 
 export function trackSupportsTorch(track: MediaStreamTrack | null) {
-  if (!track || !("getCapabilities" in track)) return false;
-  const capabilities = track.getCapabilities() as MediaTrackCapabilities & {
-    torch?: boolean;
-  };
-  return capabilities.torch === true;
+  if (!track) return false;
+  if ("getCapabilities" in track) {
+    const capabilities = track.getCapabilities() as MediaTrackCapabilities & {
+      torch?: boolean;
+    };
+    if (typeof capabilities.torch === "boolean") {
+      return capabilities.torch;
+    }
+  }
+  return typeof track.applyConstraints === "function";
 }
 
 export async function setTrackTorch(

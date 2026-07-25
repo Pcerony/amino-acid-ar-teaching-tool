@@ -823,6 +823,7 @@ button:focus-visible {
   width: min(78vw, 390px);
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
+  pointer-events: none !important;
 }
 
 .has-anchor .guide-wrap {
@@ -997,7 +998,7 @@ button:focus-visible {
   z-index: 3;
   left: 50%;
   bottom: max(132px, calc(env(safe-area-inset-bottom) + 112px));
-  width: min(88%, 420px);
+  width: min(75%, 340px);
   min-height: 42px;
   margin: 0;
   padding: 8px 12px;
@@ -1010,6 +1011,7 @@ button:focus-visible {
   line-height: 1.55;
   text-align: center;
   backdrop-filter: blur(10px);
+  pointer-events: none !important;
 }
 
 .phase-idle .quality-hint {
@@ -1092,12 +1094,12 @@ button:focus-visible {
 
 .camera-controls {
   position: absolute;
-  z-index: 30;
+  z-index: 99 !important;
   right: max(15px, env(safe-area-inset-right));
   bottom: max(72px, calc(env(safe-area-inset-bottom) + 54px));
   display: grid;
   gap: 12px;
-  pointer-events: auto;
+  pointer-events: auto !important;
 }
 
 .has-result .camera-controls {
@@ -1107,7 +1109,7 @@ button:focus-visible {
 
 .control-button {
   position: relative;
-  z-index: 31;
+  z-index: 100 !important;
   width: 48px;
   height: 48px;
   border: 1px solid rgba(255, 255, 255, 0.36);
@@ -1116,7 +1118,7 @@ button:focus-visible {
   color: #ffffff;
   backdrop-filter: blur(12px);
   cursor: pointer;
-  pointer-events: auto;
+  pointer-events: auto !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   transition: transform 120ms ease, background 120ms ease;
 }

@@ -1152,19 +1152,16 @@ export function AminoAcidScanner() {
 
   const toggleTorch = useCallback(async () => {
     const generation = scanGenerationRef.current;
-    const track = trackRef.current;
+    const track =
+      trackRef.current ?? streamRef.current?.getVideoTracks()?.[0] ?? null;
     if (!track) return;
     const next = !torchEnabled;
     try {
       await setTrackTorch(track, next);
-      if (!isCurrentGeneration(generation) || trackRef.current !== track) {
-        return;
-      }
+      if (!isCurrentGeneration(generation)) return;
       setTorchEnabled(next);
     } catch {
-      if (!isCurrentGeneration(generation) || trackRef.current !== track) {
-        return;
-      }
+      if (!isCurrentGeneration(generation)) return;
       setTorchEnabled((prev) => !prev);
     }
   }, [isCurrentGeneration, torchEnabled]);
@@ -1309,7 +1306,7 @@ export function AminoAcidScanner() {
     ],
   );
 
-  const manualSnapshot = useCallback(() => {
+  const manualSnapshot = useCallback(async () => {
     const generation = scanGenerationRef.current;
     const video = videoRef.current;
     const stage = stageRef.current;
@@ -1338,11 +1335,29 @@ export function AminoAcidScanner() {
         const context = canvas.getContext("2d", { willReadFrequently: true });
         context?.drawImage(video, 0, 0, 480, 480);
       }
+      setQualityText("写真1まいで、形をかくにん中...");
+      if (recognizerRef.current) {
+        try {
+          const assessment = await recognizerRef.current.recognize(canvas);
+          if (!isCurrentGeneration(generation)) return;
+          if (assessment.result) {
+            applyStableResult(
+              assessment.result.id,
+              "local",
+              assessment.result.anchor,
+              generation,
+            );
+          } else {
+            setQualityText("まだわかりません。面を正面からうつしてみよう");
+          }
+        } catch {
+          if (!isCurrentGeneration(generation)) return;
+          setQualityText("まだわかりません。面を正面からうつしてみよう");
+        }
+      }
       void requestCloudFallback(canvas, true, generation);
-      if (!isCurrentGeneration(generation)) return;
-      setQualityText("1まいの写真で、もう一度たしかめています");
     }
-  }, [isCurrentGeneration, requestCloudFallback]);
+  }, [applyStableResult, isCurrentGeneration, requestCloudFallback]);
 
   useEffect(() => {
     panelExpandedRef.current = panelExpanded;

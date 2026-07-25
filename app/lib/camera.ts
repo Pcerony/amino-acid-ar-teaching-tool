@@ -60,7 +60,15 @@ export async function setTrackTorch(
   track: MediaStreamTrack,
   enabled: boolean,
 ) {
-  await track.applyConstraints({
-    advanced: [{ torch: enabled } as MediaTrackConstraintSet],
-  });
+  if (!track || track.kind !== "video") return;
+  if (typeof track.applyConstraints === "function") {
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: enabled } as MediaTrackConstraintSet],
+      });
+    } catch (err) {
+      console.warn("Torch constraint not supported", err);
+      throw err;
+    }
+  }
 }

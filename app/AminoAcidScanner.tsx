@@ -1716,22 +1716,24 @@ export function AminoAcidScanner() {
               <BookOpen aria-hidden="true" />
               アミノ酸をみる
             </button>
-            {videoDevices.length > 1 && (
-              <div className="pc-camera-select">
-                <label htmlFor="device-select">カメラ選択:</label>
-                <select
-                  id="device-select"
-                  value={selectedDeviceId}
-                  onChange={(e) => setSelectedDeviceId(e.target.value)}
-                >
-                  {videoDevices.map((dev, idx) => (
-                    <option key={dev.deviceId || idx} value={dev.deviceId}>
-                      {dev.label || `カメラ ${idx + 1}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {videoDevices.length > 1 &&
+              typeof navigator !== "undefined" &&
+              !/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && (
+                <div className="pc-camera-select">
+                  <label htmlFor="device-select">カメラ選択:</label>
+                  <select
+                    id="device-select"
+                    value={selectedDeviceId}
+                    onChange={(e) => setSelectedDeviceId(e.target.value)}
+                  >
+                    {videoDevices.map((dev, idx) => (
+                      <option key={dev.deviceId || idx} value={dev.deviceId}>
+                        {dev.label || `カメラ ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             <div className="pc-hotkeys-bar">
               <span className="hotkey-pill"><kbd>Esc</kbd> 閉じる</span>
               <span className="hotkey-pill"><kbd>D</kbd> 図鑑</span>

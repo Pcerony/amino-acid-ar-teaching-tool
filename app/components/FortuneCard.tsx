@@ -108,7 +108,11 @@ export function FortuneCard({
               <div className="fortune-media-card">
                 <span className="media-card-tag">3D 立体モデル</span>
                 <div className="fortune-molecule-3d">
-                  <MoleculeViewer molecule={molecule} theme={acid.theme} />
+                  <MoleculeViewer
+                    molecule={molecule}
+                    theme={acid.theme}
+                    active={true}
+                  />
                 </div>
                 <span className="fortune-acid-name">3D 交互モデル</span>
               </div>

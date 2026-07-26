@@ -943,6 +943,7 @@ export function AminoAcidScanner() {
       scanningRef.current ||
       document.hidden ||
       panelExpandedRef.current ||
+      (scannerMode === "fortune" && resultId !== null) ||
       !videoRef.current ||
       !stageRef.current
     ) {
@@ -1501,8 +1502,10 @@ export function AminoAcidScanner() {
 
   useEffect(() => {
     panelExpandedRef.current = panelExpanded;
+    const isFortuneResultActive = Boolean(resultId && scannerMode === "fortune");
     if (
       panelExpanded ||
+      isFortuneResultActive ||
       phase === "indexing" ||
       !recognizerReadyRef.current ||
       uploadPendingRef.current
@@ -1516,7 +1519,7 @@ export function AminoAcidScanner() {
     ) {
       beginScanLoop();
     }
-  }, [beginScanLoop, panelExpanded, phase, stopScanTimer]);
+  }, [beginScanLoop, panelExpanded, phase, resultId, scannerMode, stopScanTimer]);
 
   useEffect(() => {
     const handleVisibility = () => {

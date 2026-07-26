@@ -41,6 +41,8 @@ import {
   LoadingScreen,
 } from "./components/LoadingScreen";
 import {
+  type CameraStartResult,
+  getVideoDevices,
   setTrackTorch,
   startRearCamera,
   stopMediaStream,
@@ -386,6 +388,34 @@ function FortuneGuideModal({
   );
 }
 
+const ESSENTIAL_IDS = new Set<string>([
+  "valine",
+  "leucine",
+  "isoleucine",
+  "methionine",
+  "phenylalanine",
+  "tryptophan",
+  "threonine",
+  "lysine",
+  "histidine",
+]);
+
+const HYDROPHILIC_IDS = new Set<string>([
+  "serine",
+  "threonine",
+  "cysteine",
+  "tyrosine",
+  "asparagine",
+  "glutamine",
+  "aspartic-acid",
+  "glutamic-acid",
+  "lysine",
+  "arginine",
+  "histidine",
+]);
+
+type CatalogCategory = "all" | "essential" | "nonessential" | "hydrophilic" | "hydrophobic";
+
 function AminoAcidList({
   selectedId,
   onSelect,
@@ -395,14 +425,35 @@ function AminoAcidList({
   onSelect: (id: AminoAcidId) => void;
   onClose: () => void;
 }) {
-  const selected = selectedId ? AMINO_ACID_BY_ID[selectedId] : null;
-  const molecule = selected ? MOLECULES[selected.id] : null;
+  const [category, setCategory] = useState<CatalogCategory>("all");
+  const [search, setSearch] = useState("");
+
+  const filteredAcids = useMemo(() => {
+    return AMINO_ACIDS.filter((acid) => {
+      if (category === "essential" && !ESSENTIAL_IDS.has(acid.id)) return false;
+      if (category === "nonessential" && ESSENTIAL_IDS.has(acid.id)) return false;
+      if (category === "hydrophilic" && !HYDROPHILIC_IDS.has(acid.id)) return false;
+      if (category === "hydrophobic" && HYDROPHILIC_IDS.has(acid.id)) return false;
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const matchName = acid.nameJa.toLowerCase().includes(q);
+        const matchCode = acid.code.toLowerCase().includes(q);
+        const matchEn = acid.nameEn.toLowerCase().includes(q);
+        return matchName || matchCode || matchEn;
+      }
+      return true;
+    });
+  }, [category, search]);
+
+  const activeId = selectedId ?? filteredAcids[0]?.id ?? "glycine";
+  const selected = AMINO_ACID_BY_ID[activeId] ?? AMINO_ACID_BY_ID["glycine"];
+  const molecule = MOLECULES[selected.id];
 
   return (
     <section className="amino-list" aria-labelledby="amino-list-title">
       <header className="amino-list-heading">
         <div>
-          <p className="home-kicker">20このなかま</p>
+          <p className="home-kicker">20このなかま大図鑑</p>
           <h2 id="amino-list-title">アミノ酸をみる</h2>
         </div>
         <button
@@ -415,57 +466,114 @@ function AminoAcidList({
           <X aria-hidden="true" />
         </button>
       </header>
-      <div className="amino-list-grid">
-        {AMINO_ACIDS.map((acid) => (
+
+      <div className="amino-catalog-toolbar">
+        <div className="amino-category-tabs" role="tablist">
           <button
-            key={acid.id}
-            className={`amino-list-item${selectedId === acid.id ? " is-selected" : ""}`}
             type="button"
-            onClick={() => onSelect(acid.id)}
-            style={{ "--acid-color": acid.theme } as React.CSSProperties}
+            className={`tab-btn ${category === "all" ? "is-active" : ""}`}
+            onClick={() => setCategory("all")}
           >
-            <span className="amino-list-dot" aria-hidden="true" />
-            <span>{acid.nameJa}</span>
-            <small>{acid.code}</small>
+            すべて ({AMINO_ACIDS.length})
           </button>
-        ))}
-      </div>
-      {selected && (
-        <div className="amino-list-detail" aria-live="polite">
-          <div className="amino-detail-header">
-            <div>
-              <h3>{selected.nameJa} <small>({selected.code})</small></h3>
-              <p className="amino-detail-shape">{selected.shape}</p>
-              <p className="amino-detail-role">{selected.role}</p>
-            </div>
-            <button
-              className="secondary-button amino-detail-close"
-              type="button"
-              onClick={() => onSelect(selected.id)}
-            >
-              とじる
-            </button>
-          </div>
-          <div className="amino-detail-media">
-            <div className="amino-detail-media-card">
-              <span className="amino-detail-media-title">教具カード</span>
-              <img
-                src={selected.referencePath}
-                alt={selected.nameJa}
-                className="amino-detail-img"
-              />
-            </div>
-            {molecule && (
-              <div className="amino-detail-media-card">
-                <span className="amino-detail-media-title">3D 分子モデル</span>
-                <div className="amino-detail-3d">
-                  <MoleculeViewer molecule={molecule} theme={selected.theme} />
-                </div>
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            className={`tab-btn ${category === "essential" ? "is-active" : ""}`}
+            onClick={() => setCategory("essential")}
+          >
+            ひつす (9)
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${category === "nonessential" ? "is-active" : ""}`}
+            onClick={() => setCategory("nonessential")}
+          >
+            ひひつす (11)
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${category === "hydrophilic" ? "is-active" : ""}`}
+            onClick={() => setCategory("hydrophilic")}
+          >
+            みずになじむ
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${category === "hydrophobic" ? "is-active" : ""}`}
+            onClick={() => setCategory("hydrophobic")}
+          >
+            みずをはじく
+          </button>
         </div>
-      )}
+        <div className="amino-search-box">
+          <input
+            type="text"
+            placeholder="なまえや略称でさがす (例: Gly, アラニン)"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="amino-catalog-body">
+        <div className="amino-list-grid">
+          {filteredAcids.map((acid) => (
+            <button
+              key={acid.id}
+              className={`amino-list-item${activeId === acid.id ? " is-selected" : ""}`}
+              type="button"
+              onClick={() => onSelect(acid.id)}
+              style={{ "--acid-color": acid.theme } as React.CSSProperties}
+            >
+              <span className="amino-list-dot" aria-hidden="true" />
+              <span>{acid.nameJa}</span>
+              <small>{acid.code}</small>
+            </button>
+          ))}
+        </div>
+
+        {selected && (
+          <div className="amino-list-detail" aria-live="polite">
+            <div className="amino-detail-header">
+              <div>
+                <h3>
+                  {selected.nameJa}{" "}
+                  <small>
+                    ({selected.code} / {selected.nameEn})
+                  </small>
+                </h3>
+                <p className="amino-detail-shape">{selected.shape}</p>
+                <p className="amino-detail-role">{selected.role}</p>
+              </div>
+              <button
+                className="secondary-button amino-detail-close"
+                type="button"
+                onClick={() => onSelect(selected.id)}
+              >
+                とじる
+              </button>
+            </div>
+            <div className="amino-detail-media">
+              <div className="amino-detail-media-card">
+                <span className="amino-detail-media-title">教具カード</span>
+                <img
+                  src={selected.referencePath}
+                  alt={selected.nameJa}
+                  className="amino-detail-img"
+                />
+              </div>
+              {molecule && (
+                <div className="amino-detail-media-card">
+                  <span className="amino-detail-media-title">3D 分子モデル</span>
+                  <div className="amino-detail-3d">
+                    <MoleculeViewer molecule={molecule} theme={selected.theme} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -486,12 +594,49 @@ export function AminoAcidScanner() {
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [showFortuneGuide, setShowFortuneGuide] = useState(false);
   const [cloudNotice, setCloudNotice] = useState(false);
   const [uploadedPreview, setUploadedPreview] = useState<string | null>(null);
   const [trackedQuad, setTrackedQuad] = useState<TrackedQuad | null>(null);
-  const [anchorState, setAnchorState] =
-    useState<AnchorState["state"]>("lost");
+  const [anchorState, setAnchorState] = useState<AnchorState["state"]>("lost");
+
+  useEffect(() => {
+    void getVideoDevices().then((devices) => {
+      setVideoDevices(devices);
+      if (devices.length > 0 && !selectedDeviceId) {
+        setSelectedDeviceId(devices[0].deviceId);
+      }
+    });
+  }, [selectedDeviceId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+      ) {
+        return;
+      }
+      if (e.key === "Escape") {
+        if (showAminoList) setShowAminoList(false);
+        else if (showFortuneGuide) setShowFortuneGuide(false);
+        else if (panelExpanded) setPanelExpanded(false);
+      } else if (e.key === "d" || e.key === "D") {
+        if (!cameraActive) {
+          setShowAminoList((prev) => !prev);
+        }
+      } else if (e.key === "f" || e.key === "F") {
+        if (!cameraActive) {
+          setShowFortuneGuide(true);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [cameraActive, panelExpanded, showAminoList, showFortuneGuide]);
   const phaseRef = useRef<ScannerPhase>("idle");
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -1017,7 +1162,7 @@ export function AminoAcidScanner() {
     consensusRef.current.reset(true);
     lastCloudAtRef.current = 0;
     setPhase("requesting");
-    const camera = await startRearCamera();
+    const camera = await startRearCamera(selectedDeviceId || undefined);
     if (!isCurrentCameraStart(cameraGeneration)) {
       if (camera.ok) stopMediaStream(camera.stream);
       return;
@@ -1571,6 +1716,27 @@ export function AminoAcidScanner() {
               <BookOpen aria-hidden="true" />
               アミノ酸をみる
             </button>
+            {videoDevices.length > 1 && (
+              <div className="pc-camera-select">
+                <label htmlFor="device-select">カメラ選択:</label>
+                <select
+                  id="device-select"
+                  value={selectedDeviceId}
+                  onChange={(e) => setSelectedDeviceId(e.target.value)}
+                >
+                  {videoDevices.map((dev, idx) => (
+                    <option key={dev.deviceId || idx} value={dev.deviceId}>
+                      {dev.label || `カメラ ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="pc-hotkeys-bar">
+              <span className="hotkey-pill"><kbd>Esc</kbd> 閉じる</span>
+              <span className="hotkey-pill"><kbd>D</kbd> 図鑑</span>
+              <span className="hotkey-pill"><kbd>F</kbd> おみくじ</span>
+            </div>
             <p className="privacy-note">
               <ShieldCheck aria-hidden="true" />
               カメラの映像は、ふだん端末の中だけで調べます。

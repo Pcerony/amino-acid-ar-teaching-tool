@@ -9,7 +9,19 @@ export type CameraStartResult =
   | { ok: true; stream: MediaStream; track: MediaStreamTrack }
   | { ok: false; kind: CameraErrorKind };
 
-export async function startRearCamera(): Promise<CameraStartResult> {
+export async function getVideoDevices(): Promise<MediaDeviceInfo[]> {
+  if (!navigator.mediaDevices?.enumerateDevices) return [];
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((d) => d.kind === "videoinput");
+  } catch {
+    return [];
+  }
+}
+
+export async function startRearCamera(
+  deviceId?: string,
+): Promise<CameraStartResult> {
   if (!globalThis.isSecureContext && location.hostname !== "localhost") {
     return { ok: false, kind: "insecure" };
   }
@@ -17,14 +29,18 @@ export async function startRearCamera(): Promise<CameraStartResult> {
     return { ok: false, kind: "missing" };
   }
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
+  const videoConstraints: MediaTrackConstraints = deviceId
+    ? { deviceId: { exact: deviceId } }
+    : {
         facingMode: { ideal: "environment" },
         width: { ideal: 1280 },
         height: { ideal: 1280 },
-      },
+      };
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: videoConstraints,
     });
     const [track] = stream.getVideoTracks();
     if (!track) {

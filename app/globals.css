@@ -1838,14 +1838,157 @@ rt {
   gap: 8px;
 }
 
-@keyframes guide-fade-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
+
+/* --- PC Desktop Web Layout & UX Styles --- */
+.amino-catalog-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.amino-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tab-btn {
+  padding: 5px 11px;
+  border: 1px solid #d4e2d9;
+  border-radius: 20px;
+  background: #f4faf6;
+  color: #3b5c4d;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.tab-btn:hover {
+  background: #e3f2e9;
+  color: #1b3d2f;
+}
+
+.tab-btn.is-active {
+  border-color: #2e9a78;
+  background: #2e9a78;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(46, 154, 120, 0.25);
+}
+
+.amino-search-box input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d0e0d6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1c352a;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 150ms ease;
+}
+
+.amino-search-box input:focus {
+  border-color: #2e9a78;
+  box-shadow: 0 0 0 3px rgba(46, 154, 120, 0.15);
+}
+
+.pc-camera-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(14, 20, 17, 0.65);
+  color: #d7e2dc;
+  font-size: 11px;
+  backdrop-filter: blur(8px);
+}
+
+.pc-camera-select select {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 11px;
+}
+
+.pc-hotkeys-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.hotkey-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #b8cac0;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+/* --- Wide Screen Desktop Responsiveness (>= 960px) --- */
+@media (min-width: 960px) {
+  .scanner-stage {
+    max-width: 960px;
+    height: min(82dvh, 740px);
+    aspect-ratio: auto;
+    border-radius: 18px;
+    box-shadow: 0 16px 60px rgba(0, 0, 0, 0.45);
   }
-  to {
-    opacity: 1;
-    transform: scale(1);
+
+  .amino-list {
+    width: min(calc(100% - 48px), 900px);
+    max-height: min(80dvh, 680px);
+    padding: 22px 24px;
+  }
+
+  .amino-catalog-toolbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .amino-catalog-body {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .amino-list-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: 480px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .amino-list-detail {
+    margin-top: 0;
+    position: sticky;
+    top: 0;
+  }
+
+  .start-actions {
+    width: min(calc(100% - 64px), 480px);
   }
 }
+
 
